@@ -187,6 +187,14 @@ const emailService = {
 
 		let { imageDataList, html } = await attService.toImageUrlHtml(c, content);
 
+		// 附件数量限制检查（在发信和落库前执行，避免超限时邮件已发或未扣配额）
+		if (imageDataList.length > 10) {
+			throw new BizError(t('imageAttLimit'));
+		}
+		if (attachments?.length > 10) {
+			throw new BizError(t('attLimit'));
+		}
+
 		// 没有发件人名字自动截取
 		if (!name) {
 			name = emailUtils.getName(accountRow.email);
@@ -262,17 +270,11 @@ const emailService = {
 
 		// 保存内嵌附件
 		if (imageDataList.length > 0) {
-			if (imageDataList.length > 10) {
-				throw new BizError(t('imageAttLimit'));
-			}
 			await attService.saveArticleAtt(c, imageDataList, userId, accountId, emailResult.emailId);
 		}
 
 		// 保存普通附件
 		if (attachments?.length > 0) {
-			if (attachments.length > 10) {
-				throw new BizError(t('attLimit'));
-			}
 			await attService.saveSendAtt(c, attachments, userId, accountId, emailResult.emailId);
 		}
 
@@ -1005,7 +1007,7 @@ const emailService = {
 	async sendDraft(c, draftId, userId) {
 		const draft = await this.detail(c, draftId, userId);
 		if (!draft || draft.type !== emailConst.type.SEND || draft.status !== emailConst.status.SAVING) {
-			throw new BizError(t('draftNotExist') || 'Draft not found');
+			throw new BizError(t('draftNotExist'));
 		}
 
 		// 1. Recipient check
@@ -1022,7 +1024,7 @@ const emailService = {
 			receiveEmail = [draft.toEmail];
 		}
 		if (receiveEmail.length === 0) {
-			throw new BizError(t('receiveEmailEmpty') || 'Recipient is empty');
+			throw new BizError(t('receiveEmailEmpty'));
 		}
 
 		// 2. Sender account check (auto fallback)
