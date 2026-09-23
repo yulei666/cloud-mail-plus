@@ -71,6 +71,8 @@ const en = {
 	aiBadOutput: 'Translation service returned invalid output',
 	aiTimeout: 'Translation request timed out',
 	aiRateLimited: 'Too many translation requests, please retry later',
+	draftNotExist: 'Draft does not exist or has already been sent/deleted',
+	receiveEmailEmpty: 'Recipient cannot be empty',
 	perms: {
 		"邮件": "Emails",
 		"邮件发送": "Send Email",

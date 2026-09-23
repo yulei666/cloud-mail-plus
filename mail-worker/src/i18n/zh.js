@@ -71,6 +71,8 @@ const zh = {
 	aiBadOutput: '翻译服务返回异常',
 	aiTimeout: '翻译请求超时',
 	aiRateLimited: '翻译请求过多，请稍后重试',
+	draftNotExist: '草稿不存在或已被发送/删除',
+	receiveEmailEmpty: '收件人不能为空',
 	perms: {
 		"邮件": "邮件",
 		"邮件发送": "邮件发送",

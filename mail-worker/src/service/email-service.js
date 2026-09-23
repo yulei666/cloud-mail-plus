@@ -169,80 +169,25 @@ const emailService = {
 			attachments //附件
 		} = params;
 
-		const { resendTokens, r2Domain, send, domainList, emailProvider } = await settingService.query(c);
-
-		let { imageDataList, html } = await attService.toImageUrlHtml(c, content);
-
-		//判断是否关闭发件功能
-		if (send === settingConst.send.CLOSE) {
-			throw new BizError(t('disabledSend'), 403);
-		}
-
-		const userRow = await userService.selectById(c, userId);
-		const roleRow = await roleService.selectById(c, userRow.type);
-
-		//判断接收方是不是全部为站内邮箱
-		const allInternal = receiveEmail.every(email => {
-			const domain = '@' + emailUtils.getDomain(email);
-			return domainList.includes(domain);
-		});
-
-		if (c.env.admin !== userRow.email) {
-
-			//发件被禁用
-			if (roleRow.sendType === 'ban') {
-				throw new BizError(t('bannedSend'), 403);
-			}
-
-			//发件被禁用
-			if (roleRow.sendType === 'internal' && !allInternal) {
-				throw new BizError(t('onlyInternalSend'), 403);
-			}
-
-		}
-
-		//如果不是管理员，权限设置了发送次数
-		if (c.env.admin !== userRow.email && roleRow.sendCount) {
-
-			if (userRow.sendCount >= roleRow.sendCount) {
-				if (roleRow.sendType === 'day') throw new BizError(t('daySendLimit'), 403);
-				if (roleRow.sendType === 'count') throw new BizError(t('totalSendLimit'), 403);
-			}
-
-			if (userRow.sendCount + receiveEmail.length > roleRow.sendCount) {
-				if (roleRow.sendType === 'day') throw new BizError(t('daySendLack'), 403);
-				if (roleRow.sendType === 'count') throw new BizError(t('totalSendLack'), 403);
-			}
-
-		}
-
+		// 1. Account check
 		const accountRow = await accountService.selectById(c, accountId);
-
 		if (!accountRow) {
 			throw new BizError(t('senderAccountNotExist'));
 		}
-
 		if (accountRow.userId !== userId) {
 			throw new BizError(t('sendEmailNotCurUser'));
 		}
 
-		if (c.env.admin !== userRow.email) {
-			//用户没有这个域名的使用权限
-			if(!roleService.hasAvailDomainPerm(roleRow.availDomain, accountRow.email)) {
-				throw new BizError(t('noDomainPermSend'),403)
-			}
+		// 2. Permission and limits check
+		const { settings, userRow, roleRow, allInternal, resendToken } = await this.checkSendLimits(c, {
+			userId,
+			receiveEmail,
+			accountRow,
+		});
 
-		}
+		let { imageDataList, html } = await attService.toImageUrlHtml(c, content);
 
-		const domain = emailUtils.getDomain(accountRow.email);
-		const resendToken = resendTokens[domain];
-
-		//如果接收方存在站外邮箱，且是resend-only模式又没有resend token
-		if (!resendToken && !allInternal && emailProvider === settingConst.emailProvider.RESEND_ONLY) {
-			throw new BizError(t('noResendToken'));
-		}
-
-		//没有发件人名字自动截取
+		// 没有发件人名字自动截取
 		if (!name) {
 			name = emailUtils.getName(accountRow.email);
 		}
@@ -251,78 +196,41 @@ const emailService = {
 			messageId: null
 		};
 
-		//如果是回复邮件
+		// 如果是回复邮件
 		if (sendType === 'reply') {
-
 			emailRow = await this.selectById(c, emailId);
-
 			if (!emailRow) {
 				throw new BizError(t('notExistEmailReply'));
 			}
-
 		}
 
-		let resendResult = {};
-		let cfSent = false;
-
-		//存在站外时发送邮件：优先CF Email Service，失败后回退Resend
-		if (!allInternal) {
-
-			const sendForm = {
-				from: `${name} <${accountRow.email}>`,
-				to: [...receiveEmail],
-				subject: subject,
-				text: text,
-				html: html,
-				attachments: [...imageDataList, ...attachments]
-			};
-
-			if (sendType === 'reply') {
-				sendForm.headers = {
-					'in-reply-to': emailRow.messageId,
-					'references': emailRow.messageId
-				};
-			}
-
-			const useCf = emailProvider !== settingConst.emailProvider.RESEND_ONLY;
-			const useResend = emailProvider !== settingConst.emailProvider.CF_ONLY;
-
-			//尝试CF Email Service发送
-			if (useCf && receiveEmail.length <= 50) {
-				try {
-					await cfEmailService.send(c.env, sendForm);
-					cfSent = true;
-				} catch (cfError) {
-					console.error(`[CF Email] failed: code=${cfError.code || 'none'} msg=${cfError.message}`);
-					if (!useResend) {
-						throw new BizError(`CF Email failed: ${cfError.message}`);
-					}
-				}
-			}
-
-			//CF失败或不可用时回退Resend
-			if (!cfSent) {
-				if (!resendToken) {
-					throw new BizError(t('noResendToken'));
-				}
-				const resend = new Resend(resendToken);
-				resendResult = await resend.emails.send(sendForm);
-			}
-
+		const headers = {};
+		if (sendType === 'reply' && emailRow.messageId) {
+			headers['in-reply-to'] = emailRow.messageId;
+			headers['references'] = emailRow.messageId;
 		}
 
-		const { data, error } = resendResult;
-
-		if (error) {
-			throw new BizError(error.message);
-		}
+		// 3. 实际投递
+		const { cfSent, resendEmailId } = await this.deliverEmail(c, {
+			accountRow,
+			senderName: name,
+			receiveEmail,
+			subject,
+			text,
+			html,
+			attachments: [...imageDataList, ...(attachments || [])],
+			headers,
+			allInternal,
+			settings,
+			resendToken,
+		});
 
 		imageDataList = imageDataList.map(item => ({...item, contentId: `<${item.contentId}>`}))
 
-		//把图片标签cid标签切换会通用url
-		html = this.imgReplace(html, imageDataList, r2Domain);
+		// 把图片标签cid标签切换会通用url
+		html = this.imgReplace(html, imageDataList, settings.r2Domain);
 
-		//封装数据保存到数据库
+		// 封装数据保存到数据库
 		const emailData = {};
 		emailData.sendEmail = accountRow.email;
 		emailData.name = name;
@@ -333,10 +241,9 @@ const emailService = {
 		emailData.status = cfSent ? emailConst.status.DELIVERED : emailConst.status.SENT;
 		emailData.type = emailConst.type.SEND;
 		emailData.userId = userId;
-		emailData.resendEmailId = data?.id;
+		emailData.resendEmailId = resendEmailId;
 
 		const recipient = [];
-
 		receiveEmail.forEach(item => {
 			recipient.push({ address: item, name: '' });
 		});
@@ -350,15 +257,10 @@ const emailService = {
 			emailData.relation = emailRow.messageId;
 		}
 
-		//如果权限有发送次数增加用户发送次数
-		if (roleRow.sendCount && roleRow.sendType !== 'internal') {
-			await userService.incrUserSendCount(c, receiveEmail.length, userId);
-		}
-
-		//保存到数据库并返回结果
+		// 保存到数据库并返回结果
 		const emailResult = await orm(c).insert(email).values(emailData).returning().get();
 
-		//保存内嵌附件
+		// 保存内嵌附件
 		if (imageDataList.length > 0) {
 			if (imageDataList.length > 10) {
 				throw new BizError(t('imageAttLimit'));
@@ -366,7 +268,7 @@ const emailService = {
 			await attService.saveArticleAtt(c, imageDataList, userId, accountId, emailResult.emailId);
 		}
 
-		//保存普通附件
+		// 保存普通附件
 		if (attachments?.length > 0) {
 			if (attachments.length > 10) {
 				throw new BizError(t('attLimit'));
@@ -377,23 +279,167 @@ const emailService = {
 		const attList = await attService.selectByEmailIds(c, [emailResult.emailId]);
 		emailResult.attList = attList;
 
-		//如果全是站内接收方，直接写入数据库
+		// 如果全是站内接收方，直接写入数据库
 		if (allInternal) {
 			await this.HandleOnSiteEmail(c, receiveEmail, emailResult, attList);
 		}
 
-		const dateStr = dayjs().format('YYYY-MM-DD');
-		let daySendTotal = await c.env.kv.get(kvConst.SEND_DAY_COUNT + dateStr);
-
-		//记录每天发件次数统计
-		if (!daySendTotal) {
-			await c.env.kv.put(kvConst.SEND_DAY_COUNT + dateStr, JSON.stringify(receiveEmail.length), { expirationTtl: 60 * 60 * 24 });
-		} else  {
-			daySendTotal = Number(daySendTotal) + receiveEmail.length
-			await c.env.kv.put(kvConst.SEND_DAY_COUNT + dateStr, JSON.stringify(daySendTotal), { expirationTtl: 60 * 60 * 24 });
-		}
+		// 4. 统计与限额计数
+		await this.recordSendStats(c, { userId, roleRow, count: receiveEmail.length });
 
 		return [ emailResult ];
+	},
+
+	// 检查发信权限与配额限制
+	async checkSendLimits(c, { userId, receiveEmail, accountRow }) {
+		const settings = await settingService.query(c);
+		const { resendTokens, send, domainList, emailProvider } = settings;
+
+		// 判断是否关闭发件功能
+		if (send === settingConst.send.CLOSE) {
+			throw new BizError(t('disabledSend'), 403);
+		}
+
+		const userRow = await userService.selectById(c, userId);
+		const roleRow = await roleService.selectById(c, userRow.type);
+
+		// 判断接收方是不是全部为站内邮箱
+		const allInternal = receiveEmail.every(email => {
+			const domain = '@' + emailUtils.getDomain(email);
+			return domainList.includes(domain);
+		});
+
+		if (c.env.admin !== userRow.email) {
+			if (roleRow.sendType === 'ban') {
+				throw new BizError(t('bannedSend'), 403);
+			}
+			if (roleRow.sendType === 'internal' && !allInternal) {
+				throw new BizError(t('onlyInternalSend'), 403);
+			}
+			if (roleRow.sendCount) {
+				if (userRow.sendCount >= roleRow.sendCount) {
+					if (roleRow.sendType === 'day') throw new BizError(t('daySendLimit'), 403);
+					if (roleRow.sendType === 'count') throw new BizError(t('totalSendLimit'), 403);
+				}
+				if (userRow.sendCount + receiveEmail.length > roleRow.sendCount) {
+					if (roleRow.sendType === 'day') throw new BizError(t('daySendLack'), 403);
+					if (roleRow.sendType === 'count') throw new BizError(t('totalSendLack'), 403);
+				}
+			}
+			if (!roleService.hasAvailDomainPerm(roleRow.availDomain, accountRow.email)) {
+				throw new BizError(t('noDomainPermSend'), 403);
+			}
+		}
+
+		const domain = emailUtils.getDomain(accountRow.email);
+		const resendToken = resendTokens ? resendTokens[domain] : null;
+
+		if (!resendToken && !allInternal && emailProvider === settingConst.emailProvider.RESEND_ONLY) {
+			throw new BizError(t('noResendToken'));
+		}
+
+		return { settings, userRow, roleRow, allInternal, resendToken };
+	},
+
+	// 实际投递邮件（CF Email 优先，回退 Resend）
+	async deliverEmail(c, { accountRow, senderName, receiveEmail, subject, text, html, attachments = [], headers = {}, allInternal, settings, resendToken }) {
+		let resendResult = {};
+		let cfSent = false;
+
+		if (!allInternal) {
+			const sendForm = {
+				from: `${senderName} <${accountRow.email}>`,
+				to: [...receiveEmail],
+				subject: subject,
+				text: text,
+				html: html,
+				attachments: attachments,
+			};
+			if (headers && Object.keys(headers).length > 0) {
+				sendForm.headers = headers;
+			}
+
+			const useCf = settings.emailProvider !== settingConst.emailProvider.RESEND_ONLY;
+			const useResend = settings.emailProvider !== settingConst.emailProvider.CF_ONLY;
+
+			// 尝试CF Email Service发送
+			if (useCf && receiveEmail.length <= 50) {
+				try {
+					await cfEmailService.send(c.env, sendForm);
+					cfSent = true;
+				} catch (cfError) {
+					console.error(`[CF Email] failed: code=${cfError.code || 'none'} msg=${cfError.message}`);
+					if (!useResend) {
+						throw new BizError(`CF Email failed: ${cfError.message}`);
+					}
+				}
+			}
+
+			// CF失败或不可用时回退Resend
+			if (!cfSent) {
+				if (!resendToken) {
+					throw new BizError(t('noResendToken'));
+				}
+				const resend = new Resend(resendToken);
+				resendResult = await resend.emails.send(sendForm);
+			}
+		}
+
+		const { data, error } = resendResult;
+		if (error) {
+			throw new BizError(error.message);
+		}
+
+		return {
+			cfSent,
+			resendEmailId: data?.id || null,
+		};
+	},
+
+	// 统一记录发件统计及扣减配额
+	async recordSendStats(c, { userId, roleRow, count }) {
+		if (roleRow.sendCount && roleRow.sendType !== 'internal') {
+			await userService.incrUserSendCount(c, count, userId);
+		}
+		const dateStr = dayjs().format('YYYY-MM-DD');
+		let daySendTotal = await c.env.kv.get(kvConst.SEND_DAY_COUNT + dateStr);
+		if (!daySendTotal) {
+			await c.env.kv.put(kvConst.SEND_DAY_COUNT + dateStr, JSON.stringify(count), { expirationTtl: 60 * 60 * 24 });
+		} else {
+			daySendTotal = Number(daySendTotal) + count;
+			await c.env.kv.put(kvConst.SEND_DAY_COUNT + dateStr, JSON.stringify(daySendTotal), { expirationTtl: 60 * 60 * 24 });
+		}
+	},
+
+	// 解析并发件账号合法性校验（防伪造与自动回退）
+	async resolveSenderAccount(c, userId, { accountId, sendEmail } = {}) {
+		let accountRow = null;
+		if (accountId) {
+			accountRow = await accountService.selectById(c, accountId);
+			if (accountRow && (accountRow.userId !== userId || accountRow.isDel !== isDel.NORMAL)) {
+				accountRow = null;
+			}
+		}
+		if (!accountRow && sendEmail) {
+			accountRow = await orm(c).select().from(account)
+				.where(and(eq(account.email, sendEmail), eq(account.userId, userId), eq(account.isDel, isDel.NORMAL)))
+				.get();
+		}
+		if (!accountRow) {
+			const userRow = await userService.selectById(c, userId);
+			if (userRow?.email) {
+				accountRow = await orm(c).select().from(account)
+					.where(and(eq(account.email, userRow.email), eq(account.userId, userId), eq(account.isDel, isDel.NORMAL)))
+					.get();
+			}
+		}
+		if (!accountRow) {
+			accountRow = await orm(c).select().from(account)
+				.where(and(eq(account.userId, userId), eq(account.isDel, isDel.NORMAL)))
+				.orderBy(asc(account.sort))
+				.get();
+		}
+		return accountRow;
 	},
 
 	//处理站内邮件发送
@@ -979,164 +1025,76 @@ const emailService = {
 			throw new BizError(t('receiveEmailEmpty') || 'Recipient is empty');
 		}
 
-		// 2. Global send setting check
-		const { resendTokens, send, domainList, emailProvider } = await settingService.query(c);
-		if (send === settingConst.send.CLOSE) {
-			throw new BizError(t('disabledSend'), 403);
-		}
-
-		// 3. User & Role checks
-		const userRow = await userService.selectById(c, userId);
-		const roleRow = await roleService.selectById(c, userRow.type);
-
-		const allInternal = receiveEmail.every(em => {
-			const domain = '@' + emailUtils.getDomain(em);
-			return domainList.includes(domain);
+		// 2. Sender account check (auto fallback)
+		const accountRow = await this.resolveSenderAccount(c, userId, {
+			accountId: draft.accountId,
+			sendEmail: draft.sendEmail,
 		});
-
-		if (c.env.admin !== userRow.email) {
-			if (roleRow.sendType === 'ban') {
-				throw new BizError(t('bannedSend'), 403);
-			}
-			if (roleRow.sendType === 'internal' && !allInternal) {
-				throw new BizError(t('onlyInternalSend'), 403);
-			}
-			if (roleRow.sendCount) {
-				if (userRow.sendCount >= roleRow.sendCount) {
-					if (roleRow.sendType === 'day') throw new BizError(t('daySendLimit'), 403);
-					if (roleRow.sendType === 'count') throw new BizError(t('totalSendLimit'), 403);
-				}
-				if (userRow.sendCount + receiveEmail.length > roleRow.sendCount) {
-					if (roleRow.sendType === 'day') throw new BizError(t('daySendLack'), 403);
-					if (roleRow.sendType === 'count') throw new BizError(t('totalSendLack'), 403);
-				}
-			}
-		}
-
-		// 4. Sender account check: must belong to current user's active accounts, or fallback to userRow.email
-		let accountRow = null;
-		if (draft.accountId) {
-			accountRow = await accountService.selectById(c, draft.accountId);
-			if (accountRow && (accountRow.userId !== userId || accountRow.isDel !== isDel.NORMAL)) {
-				accountRow = null;
-			}
-		}
-		if (!accountRow && draft.sendEmail) {
-			accountRow = await orm(c).select().from(account)
-				.where(and(eq(account.email, draft.sendEmail), eq(account.userId, userId), eq(account.isDel, isDel.NORMAL)))
-				.get();
-		}
-		if (!accountRow) {
-			accountRow = await orm(c).select().from(account)
-				.where(and(eq(account.email, userRow.email), eq(account.userId, userId), eq(account.isDel, isDel.NORMAL)))
-				.get();
-		}
-		if (!accountRow) {
-			accountRow = await orm(c).select().from(account)
-				.where(and(eq(account.userId, userId), eq(account.isDel, isDel.NORMAL)))
-				.orderBy(asc(account.sort))
-				.get();
-		}
 		if (!accountRow) {
 			throw new BizError(t('senderAccountNotExist'));
 		}
 
-		if (c.env.admin !== userRow.email) {
-			if (!roleService.hasAvailDomainPerm(roleRow.availDomain, accountRow.email)) {
-				throw new BizError(t('noDomainPermSend'), 403);
-			}
+		// 3. Permission and limits check
+		const { settings, userRow, roleRow, allInternal, resendToken } = await this.checkSendLimits(c, {
+			userId,
+			receiveEmail,
+			accountRow,
+		});
+
+		const senderName = draft.name || emailUtils.getName(accountRow.email);
+
+		const headers = {};
+		if (draft.inReplyTo) {
+			headers['in-reply-to'] = draft.inReplyTo;
+			headers['references'] = draft.relation || draft.inReplyTo;
 		}
 
-		const senderName = emailUtils.getName(accountRow.email);
-
-		// 5. Send via CF Email / Resend
-		const domain = emailUtils.getDomain(accountRow.email);
-		const resendToken = resendTokens ? resendTokens[domain] : null;
-
-		if (!resendToken && !allInternal && emailProvider === settingConst.emailProvider.RESEND_ONLY) {
-			throw new BizError(t('noResendToken'));
-		}
-
-		const sendForm = {
-			from: `${senderName} <${accountRow.email}>`,
-			to: [...receiveEmail],
+		// 4. Deliver email
+		const { cfSent, resendEmailId } = await this.deliverEmail(c, {
+			accountRow,
+			senderName,
+			receiveEmail,
 			subject: draft.subject,
 			text: draft.text,
 			html: draft.content,
-		};
-		if (draft.inReplyTo) {
-			sendForm.headers = {
-				'in-reply-to': draft.inReplyTo,
-				'references': draft.relation || draft.inReplyTo,
-			};
-		}
+			attachments: [],
+			headers,
+			allInternal,
+			settings,
+			resendToken,
+		});
 
-		let cfSent = false;
-		let resendResult = {};
-		if (!allInternal) {
-			const useCf = emailProvider !== settingConst.emailProvider.RESEND_ONLY;
-			const useResend = emailProvider !== settingConst.emailProvider.CF_ONLY;
-
-			if (useCf && receiveEmail.length <= 50) {
-				try {
-					const r = await cfEmailService.send(c.env, sendForm);
-					cfSent = true;
-					resendResult = { data: { id: r?.messageId } };
-				} catch (cfError) {
-					console.error(`[CF Email] sendDraft failed: code=${cfError.code || 'none'} msg=${cfError.message}`);
-					if (!useResend) {
-						throw new BizError(`CF Email failed: ${cfError.message}`);
-					}
-				}
-			}
-
-			if (!cfSent) {
-				if (!resendToken) {
-					throw new BizError(t('noResendToken'));
-				}
-				const resend = new Resend(resendToken);
-				resendResult = await resend.emails.send(sendForm);
-			}
-		} else {
-			cfSent = true;
-		}
-
-		const { data, error } = resendResult;
-		if (error) {
-			throw new BizError(error.message);
-		}
-
-		// 6. Increment send count for user
-		if (roleRow.sendCount && roleRow.sendType !== 'internal') {
-			await userService.incrUserSendCount(c, receiveEmail.length, userId);
-		}
-
-		// 7. Update draft status
+		// 5. Update draft in DB
+		const nowStr = dayjs().format('YYYY-MM-DD HH:mm:ss');
 		const sentStatus = cfSent ? emailConst.status.DELIVERED : emailConst.status.SENT;
-		const messageId = data?.id || '';
+
 		await orm(c).update(email).set({
 			status: sentStatus,
-			messageId: messageId,
+			resendEmailId: resendEmailId,
 			sendEmail: accountRow.email,
+			name: senderName,
 			accountId: accountRow.accountId,
+			createTime: nowStr,
 		}).where(and(eq(email.emailId, draftId), eq(email.userId, userId))).run();
 
-		// 8. Handle on-site internal delivery if needed
+		// 6. Handle on-site internal delivery if needed
 		if (allInternal) {
-			await this.HandleOnSiteEmail(c, receiveEmail, { ...draft, sendEmail: accountRow.email, accountId: accountRow.accountId }, []);
+			const attList = await attService.selectByEmailIds(c, [draftId]);
+			await this.HandleOnSiteEmail(c, receiveEmail, {
+				...draft,
+				sendEmail: accountRow.email,
+				name: senderName,
+				accountId: accountRow.accountId,
+				createTime: nowStr,
+				status: sentStatus,
+				resendEmailId: resendEmailId,
+			}, attList || []);
 		}
 
-		// 9. Update daily send count in KV
-		const dateStr = dayjs().format('YYYY-MM-DD');
-		let daySendTotal = await c.env.kv.get(kvConst.SEND_DAY_COUNT + dateStr);
-		if (!daySendTotal) {
-			await c.env.kv.put(kvConst.SEND_DAY_COUNT + dateStr, JSON.stringify(receiveEmail.length), { expirationTtl: 60 * 60 * 24 });
-		} else {
-			daySendTotal = Number(daySendTotal) + receiveEmail.length;
-			await c.env.kv.put(kvConst.SEND_DAY_COUNT + dateStr, JSON.stringify(daySendTotal), { expirationTtl: 60 * 60 * 24 });
-		}
+		// 7. Increment send count for user & daily KV stats
+		await this.recordSendStats(c, { userId, roleRow, count: receiveEmail.length });
 
-		return { sent: true, messageId };
+		return { sent: true, resendEmailId, cfSent };
 	},
 
 	async markSent(c, emailId, userId, sendResult) {

@@ -65,7 +65,7 @@ watch(
 
 function decide(accepted) {
   if (isBusy.value) return;
-  if (accepted && previewError.value) return;
+  if (accepted && (previewError.value || loadingPreview.value)) return;
   localSubmitting.value = true;
   emit('decision', {
     accepted,
@@ -95,6 +95,10 @@ function decide(accepted) {
         </div>
 
         <div v-else-if="preview" class="preview-box">
+          <div class="preview-field">
+            <span class="field-label">{{ $t('sender') }}:</span>
+            <span class="field-val" :title="preview.from">{{ preview.from || '-' }}</span>
+          </div>
           <div class="preview-field">
             <span class="field-label">{{ $t('recipient') }}:</span>
             <span class="field-val" :title="preview.to">{{ preview.to || '-' }}</span>
@@ -157,7 +161,7 @@ function decide(accepted) {
         <button
           class="confirm"
           :class="{ danger }"
-          :disabled="isBusy || Boolean(previewError)"
+          :disabled="isBusy || loadingPreview || Boolean(previewError)"
           @click="decide(true)"
         >
           <span v-if="isBusy" class="spinner-small"></span>

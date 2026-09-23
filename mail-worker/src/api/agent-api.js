@@ -136,9 +136,15 @@ app.get('/agent/preview', async (c) => {
     if (!draft || draft.type !== emailConst.type.SEND || draft.status !== emailConst.status.SAVING) {
       return c.json(result.fail('draft-not-found'), 404);
     }
+    const senderAccount = await emailService.resolveSenderAccount(c, userId, {
+      accountId: draft.accountId,
+      sendEmail: draft.sendEmail,
+    });
+    const fromEmail = senderAccount ? senderAccount.email : (draft.sendEmail || userContext.getUser(c)?.email || '');
     const cleanText = (draft.text || draft.content?.replace(/<[^>]+>/g, ' ') || '').replace(/\s+/g, ' ').trim();
     return c.json(result.ok({
       id: draft.emailId,
+      from: fromEmail,
       to: draft.toEmail,
       subject: draft.subject || '',
       preview: cleanText.slice(0, 160),
