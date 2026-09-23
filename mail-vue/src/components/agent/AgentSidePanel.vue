@@ -11,6 +11,8 @@ import { userDraftStore } from '@/store/draft';
 import { useEmailStore } from '@/store/email';
 import ToolConfirmation from './ToolConfirmation.vue';
 import http from '@/axios/index.js';
+import { Icon } from '@iconify/vue';
+import { ElMessage, ElMessageBox } from 'element-plus';
 
 const props = defineProps({ visible: Boolean });
 const emit = defineEmits(['close']);
@@ -86,6 +88,7 @@ const pendingConfirm = computed(() =>
 );
 
 const busy = computed(() => ['submitted', 'streaming'].includes(chat.value?.status));
+const canClear = computed(() => !busy.value && Boolean(chat.value?.messages?.length));
 
 async function onSubmit() {
   const text = input.value.trim();
@@ -129,8 +132,28 @@ async function onConfirmTool({ accepted, toolCallId, toolName, args }) {
 }
 
 async function clearChat() {
-  await store.clear();
-  chat.value = new Chat({ transport, messages: [] });
+  if (!canClear.value) return;
+  try {
+    await ElMessageBox.confirm(
+      t('aiAgentClearChatConfirm'),
+      t('aiAgentClearChatTitle'),
+      {
+        confirmButtonText: t('confirm'),
+        cancelButtonText: t('cancel'),
+        type: 'warning',
+        confirmButtonClass: 'el-button--danger',
+      }
+    );
+  } catch {
+    return; // User cancelled
+  }
+
+  try {
+    await store.clear();
+    chat.value = new Chat({ transport, messages: [] });
+  } catch (e) {
+    ElMessage.error(e?.message || t('aiAgentClearFailed'));
+  }
 }
 
 function renderPart(part) {
@@ -151,10 +174,23 @@ function escape(s) { return String(s).replace(/[<>&]/g, c => ({'<':'&lt;','>':'&
   <Transition name="slide">
     <aside v-if="visible" class="agent-panel">
       <header class="agent-head">
-        <span>✨ {{ $t('aiAgentChatTitle') }}</span>
-        <div>
-          <button @click="clearChat" :title="$t('aiAgentClearChat')">🗑</button>
-          <button @click="$emit('close')" title="×">×</button>
+        <span class="head-title">✨ {{ $t('aiAgentChatTitle') }}</span>
+        <div class="head-actions">
+          <button
+            class="head-btn head-btn-danger"
+            :disabled="!canClear"
+            :title="$t('aiAgentClearChat')"
+            @click="clearChat"
+          >
+            <Icon icon="material-symbols:delete-outline-rounded" width="18" height="18" />
+          </button>
+          <button
+            class="head-btn head-btn-close"
+            :title="$t('aiAgentClose')"
+            @click="$emit('close')"
+          >
+            <Icon icon="material-symbols-light:close-rounded" width="20" height="20" />
+          </button>
         </div>
       </header>
 
@@ -234,7 +270,59 @@ function escape(s) { return String(s).replace(/[<>&]/g, c => ({'<':'&lt;','>':'&
   display: flex; flex-direction: column;
   box-shadow: -4px 0 12px rgba(0,0,0,0.05); z-index: 1000;
 }
-.agent-head { padding: 12px 16px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; font-weight: 600; }
+.agent-head {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--el-border-color-light, #eee);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+}
+
+.head-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  color: var(--el-text-color-primary, #303133);
+}
+
+.head-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.head-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--el-text-color-secondary, #606266);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  padding: 0;
+}
+
+.head-btn-close:hover:not(:disabled) {
+  background: var(--el-fill-color, #f0f2f5);
+  color: var(--el-text-color-primary, #303133);
+}
+
+.head-btn-danger:hover:not(:disabled) {
+  background: var(--el-color-danger-light-9, #fef0f0);
+  color: var(--el-color-danger, #f56c6c);
+  border-color: var(--el-color-danger-light-7, #fde2e2);
+}
+
+.head-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
 
 .active-email-card {
   margin: 10px 12px 2px 12px;

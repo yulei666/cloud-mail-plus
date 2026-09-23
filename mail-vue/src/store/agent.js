@@ -65,7 +65,7 @@ export const useAgentStore = defineStore('agent', {
     },
 
     async clear() {
-      await http.post('/agent/clear');
+      await http.post('/agent/clear', null, { noMsg: true });
       this.messages = [];
     },
 
