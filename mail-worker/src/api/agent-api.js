@@ -54,7 +54,8 @@ app.post('/agent/chat', async (c) => {
     return c.json(result.fail('model-resolve-failed: ' + err?.message), 400);
   }
 
-  const tools = buildTools({ env: c.env, userId, userEmail: user.email, user });
+  const activeEmailId = Number(c.req.query('activeEmailId') || c.req.header('x-active-email-id') || body?.activeEmailId) || null;
+  const tools = buildTools({ env: c.env, userId, userEmail: user.email, user, activeEmailId });
 
   try {
     const stream = streamText({

@@ -1,31 +1,53 @@
 <script setup>
 import { ref, computed, onMounted, watch, nextTick, shallowRef } from 'vue';
+import { useRoute } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 import { Chat } from '@ai-sdk/vue';
 import { DefaultChatTransport } from 'ai';
 import MarkdownIt from 'markdown-it';
 import taskLists from 'markdown-it-task-lists';
 import { useAgentStore } from '@/store/agent';
 import { userDraftStore } from '@/store/draft';
+import { useEmailStore } from '@/store/email';
 import ToolConfirmation from './ToolConfirmation.vue';
 import http from '@/axios/index.js';
 
 const props = defineProps({ visible: Boolean });
 const emit = defineEmits(['close']);
 
+const route = useRoute();
+const emailStore = useEmailStore();
+const { t } = useI18n();
+
 const store = useAgentStore();
 const draftStore = userDraftStore();
 const md = new MarkdownIt({ html: false, linkify: true, breaks: true }).use(taskLists);
 const scroller = ref(null);
+const textareaRef = ref(null);
 const input = ref('');
 
-// Token-aware transport so the JWT travels with each chat request.
+// Detect if user is currently reading a specific email in /message (route name: 'content')
+const activeEmail = computed(() => {
+  if (route.name === 'content' && emailStore.contentData?.email?.emailId) {
+    return emailStore.contentData.email;
+  }
+  return null;
+});
+
+// Token-aware transport so the JWT travels with each chat request, plus activeEmailId context.
 const transport = new DefaultChatTransport({
   api: '/api/agent/chat',
   fetch: (url, init) => {
     const headers = new Headers(init?.headers || {});
     const token = localStorage.getItem('token');
     if (token) headers.set('Authorization', token);
-    return fetch(url, { ...init, headers });
+
+    const targetUrl = new URL(url, window.location.origin);
+    if (activeEmail.value?.emailId) {
+      targetUrl.searchParams.set('activeEmailId', String(activeEmail.value.emailId));
+      headers.set('X-Active-Email-Id', String(activeEmail.value.emailId));
+    }
+    return fetch(targetUrl.toString(), { ...init, headers });
   },
 });
 
@@ -72,6 +94,28 @@ async function onSubmit() {
   await chat.value.sendMessage({ text });
 }
 
+async function handleQuickAction(action) {
+  if (!activeEmail.value) return;
+  const id = activeEmail.value.emailId;
+  const subject = activeEmail.value.subject || '';
+
+  if (action === 'summarize') {
+    if (chat.value.status === 'streaming') return;
+    const prompt = t('aiAgentPromptSummarize', { id, subject });
+    await chat.value.sendMessage({ text: prompt });
+  } else if (action === 'todo') {
+    if (chat.value.status === 'streaming') return;
+    const prompt = t('aiAgentPromptTodo', { id, subject });
+    await chat.value.sendMessage({ text: prompt });
+  } else if (action === 'reply') {
+    input.value = t('aiAgentPromptReplyPrefix', { id });
+    await nextTick();
+    if (textareaRef.value) {
+      textareaRef.value.focus();
+    }
+  }
+}
+
 async function onConfirmTool({ accepted, toolCallId, toolName, args }) {
   if (!accepted) {
     chat.value.addToolResult({ toolCallId, output: { cancelled: true } });
@@ -114,6 +158,48 @@ function escape(s) { return String(s).replace(/[<>&]/g, c => ({'<':'&lt;','>':'&
         </div>
       </header>
 
+      <div v-if="activeEmail" class="active-email-card">
+        <div class="card-header">
+          <span class="card-badge">
+            <span class="badge-dot"></span>
+            {{ $t('aiAgentViewingEmail') }}
+          </span>
+          <span class="card-id">#{{ activeEmail.emailId }}</span>
+        </div>
+        <div class="card-subject" :title="activeEmail.subject">
+          {{ activeEmail.subject || '(' + $t('noSubject') + ')' }}
+        </div>
+        <div class="card-meta">
+          <span class="card-sender" :title="activeEmail.sendEmail || activeEmail.name">
+            {{ activeEmail.name ? `${activeEmail.name} <${activeEmail.sendEmail}>` : activeEmail.sendEmail }}
+          </span>
+          <span v-if="activeEmail.createTime" class="card-date">{{ activeEmail.createTime }}</span>
+        </div>
+        <div class="card-actions">
+          <button
+            type="button"
+            class="btn-action"
+            :disabled="chat.status === 'streaming'"
+            @click="handleQuickAction('summarize')">
+            📝 {{ $t('aiAgentSummarizeThis') }}
+          </button>
+          <button
+            type="button"
+            class="btn-action"
+            :disabled="chat.status === 'streaming'"
+            @click="handleQuickAction('todo')">
+            📋 {{ $t('aiAgentTodoThis') }}
+          </button>
+          <button
+            type="button"
+            class="btn-action"
+            :disabled="chat.status === 'streaming'"
+            @click="handleQuickAction('reply')">
+            ✍️ {{ $t('aiAgentReplyThis') }}
+          </button>
+        </div>
+      </div>
+
       <div ref="scroller" class="agent-body">
         <div v-for="m in chat.messages" :key="m.id" :class="['msg', m.role]">
           <div v-for="(p, i) in (m.parts || [{type:'text', text:m.content}])"
@@ -129,7 +215,8 @@ function escape(s) { return String(s).replace(/[<>&]/g, c => ({'<':'&lt;','>':'&
         @decision="onConfirmTool" />
 
       <form class="agent-input" @submit.prevent="onSubmit">
-        <textarea v-model="input"
+        <textarea ref="textareaRef"
+                  v-model="input"
                   :placeholder="$t('aiAgentChatPlaceholder')"
                   rows="2"
                   @keydown.enter.exact.prevent="onSubmit" />
@@ -148,6 +235,117 @@ function escape(s) { return String(s).replace(/[<>&]/g, c => ({'<':'&lt;','>':'&
   box-shadow: -4px 0 12px rgba(0,0,0,0.05); z-index: 1000;
 }
 .agent-head { padding: 12px 16px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; font-weight: 600; }
+
+.active-email-card {
+  margin: 10px 12px 2px 12px;
+  padding: 10px 12px;
+  background: var(--el-color-primary-light-9, #f0f7ff);
+  border: 1px solid var(--el-color-primary-light-7, #d0e7ff);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.card-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 600;
+  color: var(--el-color-primary, #409eff);
+  font-size: 11px;
+}
+
+.badge-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--el-color-primary, #409eff);
+  display: inline-block;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { transform: scale(0.95); opacity: 0.8; }
+  50% { transform: scale(1.2); opacity: 1; }
+  100% { transform: scale(0.95); opacity: 0.8; }
+}
+
+.card-id {
+  font-family: monospace;
+  font-size: 11px;
+  color: var(--el-text-color-secondary, #909399);
+}
+
+.card-subject {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--el-text-color-primary, #303133);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+}
+
+.card-meta {
+  display: flex;
+  justify-content: space-between;
+  color: var(--el-text-color-secondary, #606266);
+  font-size: 11px;
+}
+
+.card-sender {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+.card-date {
+  white-space: nowrap;
+  color: var(--el-text-color-placeholder, #909399);
+}
+
+.card-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.btn-action {
+  flex: 1;
+  padding: 4px 6px;
+  background: #ffffff;
+  border: 1px solid var(--el-color-primary-light-5, #b3d8ff);
+  color: var(--el-color-primary, #409eff);
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.btn-action:hover:not(:disabled) {
+  background: var(--el-color-primary, #409eff);
+  color: #ffffff;
+}
+
+.btn-action:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .agent-body { flex: 1; overflow-y: auto; padding: 12px; }
 .msg { margin-bottom: 12px; padding: 8px 12px; border-radius: 8px; }
 .msg.user { background: #f0f7ff; }

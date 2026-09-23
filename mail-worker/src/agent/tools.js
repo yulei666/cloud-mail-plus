@@ -12,10 +12,36 @@ import { resolveLanguageModel } from './provider';
 
 // Tool factory — binds env + userId so each user only sees their own data.
 // `c` mirrors the Hono context shape that the rest of the codebase uses: `{ env }`.
-export function buildTools({ env, userId, userEmail, user }) {
+export function buildTools({ env, userId, userEmail, user, activeEmailId }) {
   const c = { env };
 
   return {
+    getCurrentEmail: tool({
+      description: 'Fetch the full details of the email that the user is currently viewing in the web client. Call this tool whenever the user refers to "this email", "current email", "the message I am looking at", or asks to summarize/reply to the email without giving an explicit email ID.',
+      inputSchema: z.object({}),
+      execute: async () => {
+        if (!activeEmailId) {
+          return {
+            error: 'User is not currently viewing any specific email in the UI. Please ask the user to specify which email they mean or search emails using searchEmails / listEmails.'
+          };
+        }
+        const detail = await emailService.detail(c, activeEmailId, userId);
+        if (!detail) return { error: `Current email (ID: ${activeEmailId}) not found or not accessible` };
+        const atts = await attService.list(c, { emailId: activeEmailId }, userId);
+        return {
+          emailId: detail.emailId,
+          from: detail.sendEmail,
+          name: detail.name,
+          to: detail.toEmail,
+          subject: detail.subject,
+          html: (detail.content || '').slice(0, 8000),
+          text: (detail.text || '').slice(0, 8000),
+          attachments: (atts || []).map((a, i) => ({ index: i, name: a.name, size: a.size, mime: a.mime })),
+          createTime: detail.createTime,
+        };
+      },
+    }),
+
     listEmails: tool({
       description: 'List emails in a mailbox (inbox / sent / drafts / trash) for the current user.',
       inputSchema: z.object({
@@ -108,32 +134,55 @@ export function buildTools({ env, userId, userEmail, user }) {
     }),
 
     summarizeEmail: tool({
-      description: 'Summarize a specific email in 3-5 bullet points and surface action items.',
-      inputSchema: z.object({ emailId: z.number().int().positive() }),
+      description: 'Summarize a specific email in 3-5 bullet points and surface action items. If emailId is omitted, summarizes the email currently being viewed in the client.',
+      inputSchema: z.object({
+        emailId: z.number().int().positive().optional().describe('Email ID to summarize. Defaults to currently viewed email.'),
+      }),
       execute: async ({ emailId }) => {
-        const detail = await emailService.detail(c, emailId, userId);
-        if (!detail) return { error: 'Not found' };
+        const targetId = emailId || activeEmailId;
+        if (!targetId) return { error: 'No email specified and no email is currently being viewed in the client.' };
+        const detail = await emailService.detail(c, targetId, userId);
+        if (!detail) return { error: `Email ${targetId} not found` };
         const body = (detail.text || detail.content || '').slice(0, 6000);
-        const r = await env.AI.run('@cf/moonshotai/kimi-k2.5', {
-          messages: [
-            { role: 'system', content: 'Summarize the email in 3-5 markdown bullets, then list action items under "Actions:".' },
-            { role: 'user', content: `Subject: ${detail.subject}\nFrom: ${detail.sendEmail}\n\n${body}` },
-          ],
-        });
-        return { emailId, summary: r.response || r.result?.response || JSON.stringify(r) };
+        let summary = '';
+        if (user && user.agentProvider !== 'workers-ai') {
+          try {
+            const m = resolveLanguageModel(c, user);
+            const res = await generateText({
+              model: m,
+              system: 'Summarize the email in 3-5 markdown bullets, then list action items under "Actions:". Match the language of the email.',
+              prompt: `Subject: ${detail.subject}\nFrom: ${detail.sendEmail}\n\n${body}`,
+            });
+            summary = res.text || '';
+          } catch (e) {
+            console.error('[summarizeEmail] custom model error:', e?.message);
+          }
+        }
+        if (!summary && env.AI) {
+          const r = await env.AI.run('@cf/moonshotai/kimi-k2.5', {
+            messages: [
+              { role: 'system', content: 'Summarize the email in 3-5 markdown bullets, then list action items under "Actions:". Match the language of the email.' },
+              { role: 'user', content: `Subject: ${detail.subject}\nFrom: ${detail.sendEmail}\n\n${body}` },
+            ],
+          });
+          summary = r.response || r.result?.response || JSON.stringify(r);
+        }
+        return { emailId: targetId, summary: summary || 'Failed to generate summary' };
       },
     }),
 
     draftReply: tool({
-      description: 'Generate and persist a draft reply to a specific email. Returns draftId. Does NOT send.',
+      description: 'Generate and persist a draft reply to a specific email. Returns draftId. Does NOT send. If emailId is omitted, replies to the email currently being viewed in the client.',
       inputSchema: z.object({
-        emailId: z.number().int().positive(),
+        emailId: z.number().int().positive().optional().describe('Email ID to reply to. Defaults to currently viewed email.'),
         instructions: z.string().min(1).describe('What the reply should say'),
         tone: z.enum(['neutral', 'friendly', 'formal', 'firm']).default('neutral'),
       }),
       execute: async ({ emailId, instructions, tone }) => {
-        const original = await emailService.detail(c, emailId, userId);
-        if (!original) return { error: 'Original email not found' };
+        const targetId = emailId || activeEmailId;
+        if (!targetId) return { error: 'No email specified and no email is currently being viewed in the client.' };
+        const original = await emailService.detail(c, targetId, userId);
+        if (!original) return { error: `Original email ${targetId} not found` };
 
         const effectiveUser = user || {};
         const provider = effectiveUser.agentProvider || 'workers-ai';
