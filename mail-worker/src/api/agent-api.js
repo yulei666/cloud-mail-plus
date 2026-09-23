@@ -2,7 +2,7 @@ import app from '../hono/hono';
 import userContext from '../security/user-context';
 import userService from '../service/user-service';
 import result from '../model/result';
-import { streamText, stepCountIs } from 'ai';
+import { streamText, convertToModelMessages, stepCountIs } from 'ai';
 import { buildTools, executeConfirmedTool } from '../agent/tools';
 import { buildSystemPrompt } from '../agent/system-prompt';
 import { resolveLanguageModel, fetchAvailableModels, testModelConnectivity, maskApiKey } from '../agent/provider';
@@ -29,16 +29,30 @@ app.post('/agent/chat', async (c) => {
   const uiMessages = Array.isArray(body?.messages) ? body.messages : [];
   console.log('[agent/chat] request body keys:', Object.keys(body || {}), 'msg count:', uiMessages.length);
 
-  // Build ModelMessage[] manually — convertToModelMessages in AI SDK v6 produces
-  // unexpected shapes for the @ai-sdk/vue Chat payload format on Workers runtime.
-  const modelMessages = uiMessages.map(m => {
-    const text = Array.isArray(m.parts)
-      ? m.parts.filter(p => p?.type === 'text').map(p => p.text).join('\n')
-      : (m.content || '');
-    return { role: m.role || 'user', content: text };
-  }).filter(m => m.content);
+  // Normalize messages so each message has parts array, ensuring convertToModelMessages succeeds
+  const normalizedMessages = uiMessages.map(m => {
+    if (Array.isArray(m.parts) && m.parts.length > 0) return m;
+    const text = typeof m.content === 'string' ? m.content : (m.content ? JSON.stringify(m.content) : '');
+    return {
+      ...m,
+      parts: text ? [{ type: 'text', text }] : []
+    };
+  });
 
-  if (modelMessages.length === 0) {
+  let modelMessages;
+  try {
+    modelMessages = await convertToModelMessages(normalizedMessages);
+  } catch (convErr) {
+    console.warn('[agent/chat] convertToModelMessages failed, using fallback:', convErr);
+    modelMessages = normalizedMessages.map(m => {
+      const text = Array.isArray(m.parts)
+        ? m.parts.filter(p => p?.type === 'text').map(p => p.text).join('\n')
+        : (m.content || '');
+      return { role: m.role || 'user', content: text };
+    }).filter(m => m.content);
+  }
+
+  if (!modelMessages || modelMessages.length === 0) {
     return c.json(result.fail('no-messages-in-request'), 400);
   }
 

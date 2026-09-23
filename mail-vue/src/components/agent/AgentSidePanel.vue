@@ -3,7 +3,7 @@ import { ref, computed, onMounted, watch, nextTick, shallowRef } from 'vue';
 import { useRoute } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { Chat } from '@ai-sdk/vue';
-import { DefaultChatTransport } from 'ai';
+import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls } from 'ai';
 import MarkdownIt from 'markdown-it';
 import taskLists from 'markdown-it-task-lists';
 import { useAgentStore } from '@/store/agent';
@@ -27,6 +27,29 @@ const md = new MarkdownIt({ html: false, linkify: true, breaks: true }).use(task
 const scroller = ref(null);
 const textareaRef = ref(null);
 const input = ref('');
+
+function getToolNameFromPart(part) {
+  if (!part) return '';
+  if (part.toolName) return part.toolName;
+  if (typeof part.type === 'string' && part.type.startsWith('tool-')) {
+    return part.type.slice(5);
+  }
+  return '';
+}
+
+function getToolArgsFromPart(part) {
+  return part?.input ?? part?.args ?? {};
+}
+
+function isToolPart(part) {
+  if (!part) return false;
+  return part.type === 'tool-call' || (typeof part.type === 'string' && part.type.startsWith('tool-'));
+}
+
+function hasToolOutput(part) {
+  if (!part) return false;
+  return part.output !== undefined || part.result !== undefined || part.state === 'output-available' || part.state === 'output-error';
+}
 
 // Detect if user is currently reading a specific email in /message (route name: 'content')
 const activeEmail = computed(() => {
@@ -52,7 +75,11 @@ const transport = new DefaultChatTransport({
 });
 
 // Chat is a class. shallowRef tracks identity; the class manages internal reactivity.
-const chat = shallowRef(new Chat({ transport, messages: store.messages || [] }));
+const chat = shallowRef(new Chat({
+  transport,
+  messages: store.messages || [],
+  sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
+}));
 
 watch(() => chat.value.messages, async () => {
   await nextTick();
@@ -62,10 +89,10 @@ watch(() => chat.value.messages, async () => {
 watch(() => chat.value.status, (newStatus, oldStatus) => {
   if (newStatus === 'ready' && (oldStatus === 'streaming' || oldStatus === 'submitted')) {
     const hasDraftTool = (chat.value.messages || []).some(m =>
-      (m.parts || []).some(p =>
-        (p.type === 'tool-call' || (typeof p.type === 'string' && p.type.startsWith('tool-'))) &&
-        ['draftReply', 'draftNew', 'sendDraft'].includes(p.toolName)
-      )
+      (m.parts || []).some(p => {
+        const name = getToolNameFromPart(p);
+        return ['draftReply', 'draftNew', 'sendDraft'].includes(name);
+      })
     );
     if (hasDraftTool) {
       draftStore.refreshList++;
@@ -77,15 +104,24 @@ onMounted(async () => {
   if (!store.hydrated) await store.hydrate();
 });
 
-const pendingConfirm = computed(() =>
-  chat.value.messages
-    .flatMap(m => m.parts || [])
-    .find(p =>
-      (p.type === 'tool-call' || (typeof p.type === 'string' && p.type.startsWith('tool-'))) &&
-      ['sendDraft', 'deleteEmail'].includes(p.toolName) &&
-      !(p.output || p.result)
-    )
-);
+const pendingConfirm = computed(() => {
+  for (const m of chat.value.messages || []) {
+    for (const p of m.parts || []) {
+      if (isToolPart(p)) {
+        const name = getToolNameFromPart(p);
+        if (['sendDraft', 'deleteEmail'].includes(name) && !hasToolOutput(p)) {
+          return {
+            ...p,
+            toolName: name,
+            args: getToolArgsFromPart(p),
+            toolCallId: p.toolCallId,
+          };
+        }
+      }
+    }
+  }
+  return null;
+});
 
 const busy = computed(() => ['submitted', 'streaming'].includes(chat.value?.status));
 const canClear = computed(() => !busy.value && Boolean(chat.value?.messages?.length));
@@ -121,13 +157,34 @@ async function handleQuickAction(action) {
 
 async function onConfirmTool({ accepted, toolCallId, toolName, args }) {
   if (!accepted) {
-    chat.value.addToolResult({ toolCallId, output: { cancelled: true } });
+    if (typeof chat.value.addToolOutput === 'function') {
+      await chat.value.addToolOutput({ tool: toolName, toolCallId, output: { cancelled: true } });
+    } else if (typeof chat.value.addToolResult === 'function') {
+      await chat.value.addToolResult({ toolCallId, output: { cancelled: true } });
+    }
     return;
   }
-  const r = await http.post('/agent/confirm', { name: toolName, args });
-  chat.value.addToolResult({ toolCallId, output: r.data || r });
-  if (['draftReply', 'draftNew', 'sendDraft'].includes(toolName)) {
-    draftStore.refreshList++;
+  try {
+    const r = await http.post('/agent/confirm', { name: toolName, args });
+    const output = r.data || r;
+    if (typeof chat.value.addToolOutput === 'function') {
+      await chat.value.addToolOutput({ tool: toolName, toolCallId, output });
+    } else if (typeof chat.value.addToolResult === 'function') {
+      await chat.value.addToolResult({ toolCallId, output });
+    }
+    if (['draftReply', 'draftNew', 'sendDraft'].includes(toolName)) {
+      draftStore.refreshList++;
+    }
+  } catch (err) {
+    console.error('[agent] onConfirmTool error:', err);
+    if (typeof chat.value.addToolOutput === 'function') {
+      await chat.value.addToolOutput({
+        tool: toolName,
+        toolCallId,
+        state: 'output-error',
+        errorText: err?.message || 'Execution failed',
+      });
+    }
   }
 }
 
@@ -150,7 +207,11 @@ async function clearChat() {
 
   try {
     await store.clear();
-    chat.value = new Chat({ transport, messages: [] });
+    chat.value = new Chat({
+      transport,
+      messages: [],
+      sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
+    });
   } catch (e) {
     ElMessage.error(e?.message || t('aiAgentClearFailed'));
   }
@@ -158,12 +219,24 @@ async function clearChat() {
 
 function renderPart(part) {
   if (part.type === 'text') return md.render(part.text || '');
-  if (part.type === 'tool-call' || (typeof part.type === 'string' && part.type.startsWith('tool-'))) {
-    const args = part.args || part.input;
-    return `<div class="tool-call"><b>🔧 ${part.toolName || part.type}</b><pre>${escape(JSON.stringify(args, null, 2))}</pre></div>`;
+  if (isToolPart(part)) {
+    const toolName = getToolNameFromPart(part);
+    const args = getToolArgsFromPart(part);
+    const hasOutput = hasToolOutput(part);
+    const output = part.output ?? part.result;
+    let html = `<div class="tool-call"><b>🔧 ${escape(toolName)}</b><pre>${escape(JSON.stringify(args, null, 2))}</pre></div>`;
+    if (hasOutput) {
+      if (part.state === 'output-error' || part.errorText) {
+        html += `<div class="tool-result error"><b>❌ ${escape(toolName)} error</b><pre>${escape(part.errorText || JSON.stringify(output, null, 2))}</pre></div>`;
+      } else {
+        html += `<div class="tool-result"><b>✓ ${escape(toolName)}</b><pre>${escape(JSON.stringify(output, null, 2))}</pre></div>`;
+      }
+    }
+    return html;
   }
   if (part.type === 'tool-result' || part.output) {
-    return `<div class="tool-result"><b>→ ${part.toolName || 'result'}</b><pre>${escape(JSON.stringify(part.output || part.result, null, 2))}</pre></div>`;
+    const name = part.toolName || 'result';
+    return `<div class="tool-result"><b>→ ${escape(name)}</b><pre>${escape(JSON.stringify(part.output || part.result, null, 2))}</pre></div>`;
   }
   return '';
 }
