@@ -956,6 +956,189 @@ const emailService = {
 		});
 	},
 
+	async sendDraft(c, draftId, userId) {
+		const draft = await this.detail(c, draftId, userId);
+		if (!draft || draft.type !== emailConst.type.SEND || draft.status !== emailConst.status.SAVING) {
+			throw new BizError(t('draftNotExist') || 'Draft not found');
+		}
+
+		// 1. Recipient check
+		let receiveEmail = [];
+		try {
+			if (draft.recipient) {
+				const parsed = JSON.parse(draft.recipient);
+				if (Array.isArray(parsed)) {
+					receiveEmail = parsed.map(item => typeof item === 'string' ? item : item?.address).filter(Boolean);
+				}
+			}
+		} catch (_) {}
+		if (receiveEmail.length === 0 && draft.toEmail) {
+			receiveEmail = [draft.toEmail];
+		}
+		if (receiveEmail.length === 0) {
+			throw new BizError(t('receiveEmailEmpty') || 'Recipient is empty');
+		}
+
+		// 2. Global send setting check
+		const { resendTokens, send, domainList, emailProvider } = await settingService.query(c);
+		if (send === settingConst.send.CLOSE) {
+			throw new BizError(t('disabledSend'), 403);
+		}
+
+		// 3. User & Role checks
+		const userRow = await userService.selectById(c, userId);
+		const roleRow = await roleService.selectById(c, userRow.type);
+
+		const allInternal = receiveEmail.every(em => {
+			const domain = '@' + emailUtils.getDomain(em);
+			return domainList.includes(domain);
+		});
+
+		if (c.env.admin !== userRow.email) {
+			if (roleRow.sendType === 'ban') {
+				throw new BizError(t('bannedSend'), 403);
+			}
+			if (roleRow.sendType === 'internal' && !allInternal) {
+				throw new BizError(t('onlyInternalSend'), 403);
+			}
+			if (roleRow.sendCount) {
+				if (userRow.sendCount >= roleRow.sendCount) {
+					if (roleRow.sendType === 'day') throw new BizError(t('daySendLimit'), 403);
+					if (roleRow.sendType === 'count') throw new BizError(t('totalSendLimit'), 403);
+				}
+				if (userRow.sendCount + receiveEmail.length > roleRow.sendCount) {
+					if (roleRow.sendType === 'day') throw new BizError(t('daySendLack'), 403);
+					if (roleRow.sendType === 'count') throw new BizError(t('totalSendLack'), 403);
+				}
+			}
+		}
+
+		// 4. Sender account check: must belong to current user's active accounts, or fallback to userRow.email
+		let accountRow = null;
+		if (draft.accountId) {
+			accountRow = await accountService.selectById(c, draft.accountId);
+			if (accountRow && (accountRow.userId !== userId || accountRow.isDel !== isDel.NORMAL)) {
+				accountRow = null;
+			}
+		}
+		if (!accountRow && draft.sendEmail) {
+			accountRow = await orm(c).select().from(account)
+				.where(and(eq(account.email, draft.sendEmail), eq(account.userId, userId), eq(account.isDel, isDel.NORMAL)))
+				.get();
+		}
+		if (!accountRow) {
+			accountRow = await orm(c).select().from(account)
+				.where(and(eq(account.email, userRow.email), eq(account.userId, userId), eq(account.isDel, isDel.NORMAL)))
+				.get();
+		}
+		if (!accountRow) {
+			accountRow = await orm(c).select().from(account)
+				.where(and(eq(account.userId, userId), eq(account.isDel, isDel.NORMAL)))
+				.orderBy(asc(account.sort))
+				.get();
+		}
+		if (!accountRow) {
+			throw new BizError(t('senderAccountNotExist'));
+		}
+
+		if (c.env.admin !== userRow.email) {
+			if (!roleService.hasAvailDomainPerm(roleRow.availDomain, accountRow.email)) {
+				throw new BizError(t('noDomainPermSend'), 403);
+			}
+		}
+
+		const senderName = emailUtils.getName(accountRow.email);
+
+		// 5. Send via CF Email / Resend
+		const domain = emailUtils.getDomain(accountRow.email);
+		const resendToken = resendTokens ? resendTokens[domain] : null;
+
+		if (!resendToken && !allInternal && emailProvider === settingConst.emailProvider.RESEND_ONLY) {
+			throw new BizError(t('noResendToken'));
+		}
+
+		const sendForm = {
+			from: `${senderName} <${accountRow.email}>`,
+			to: [...receiveEmail],
+			subject: draft.subject,
+			text: draft.text,
+			html: draft.content,
+		};
+		if (draft.inReplyTo) {
+			sendForm.headers = {
+				'in-reply-to': draft.inReplyTo,
+				'references': draft.relation || draft.inReplyTo,
+			};
+		}
+
+		let cfSent = false;
+		let resendResult = {};
+		if (!allInternal) {
+			const useCf = emailProvider !== settingConst.emailProvider.RESEND_ONLY;
+			const useResend = emailProvider !== settingConst.emailProvider.CF_ONLY;
+
+			if (useCf && receiveEmail.length <= 50) {
+				try {
+					const r = await cfEmailService.send(c.env, sendForm);
+					cfSent = true;
+					resendResult = { data: { id: r?.messageId } };
+				} catch (cfError) {
+					console.error(`[CF Email] sendDraft failed: code=${cfError.code || 'none'} msg=${cfError.message}`);
+					if (!useResend) {
+						throw new BizError(`CF Email failed: ${cfError.message}`);
+					}
+				}
+			}
+
+			if (!cfSent) {
+				if (!resendToken) {
+					throw new BizError(t('noResendToken'));
+				}
+				const resend = new Resend(resendToken);
+				resendResult = await resend.emails.send(sendForm);
+			}
+		} else {
+			cfSent = true;
+		}
+
+		const { data, error } = resendResult;
+		if (error) {
+			throw new BizError(error.message);
+		}
+
+		// 6. Increment send count for user
+		if (roleRow.sendCount && roleRow.sendType !== 'internal') {
+			await userService.incrUserSendCount(c, receiveEmail.length, userId);
+		}
+
+		// 7. Update draft status
+		const sentStatus = cfSent ? emailConst.status.DELIVERED : emailConst.status.SENT;
+		const messageId = data?.id || '';
+		await orm(c).update(email).set({
+			status: sentStatus,
+			messageId: messageId,
+			sendEmail: accountRow.email,
+			accountId: accountRow.accountId,
+		}).where(and(eq(email.emailId, draftId), eq(email.userId, userId))).run();
+
+		// 8. Handle on-site internal delivery if needed
+		if (allInternal) {
+			await this.HandleOnSiteEmail(c, receiveEmail, { ...draft, sendEmail: accountRow.email, accountId: accountRow.accountId }, []);
+		}
+
+		// 9. Update daily send count in KV
+		const dateStr = dayjs().format('YYYY-MM-DD');
+		let daySendTotal = await c.env.kv.get(kvConst.SEND_DAY_COUNT + dateStr);
+		if (!daySendTotal) {
+			await c.env.kv.put(kvConst.SEND_DAY_COUNT + dateStr, JSON.stringify(receiveEmail.length), { expirationTtl: 60 * 60 * 24 });
+		} else {
+			daySendTotal = Number(daySendTotal) + receiveEmail.length;
+			await c.env.kv.put(kvConst.SEND_DAY_COUNT + dateStr, JSON.stringify(daySendTotal), { expirationTtl: 60 * 60 * 24 });
+		}
+
+		return { sent: true, messageId };
+	},
+
 	async markSent(c, emailId, userId, sendResult) {
 		await orm(c).update(email).set({
 			status: emailConst.status.SENT,

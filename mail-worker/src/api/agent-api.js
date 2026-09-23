@@ -1,6 +1,10 @@
 import app from '../hono/hono';
 import userContext from '../security/user-context';
 import userService from '../service/user-service';
+import permService from '../service/perm-service';
+import emailService from '../service/email-service';
+import { emailConst } from '../const/entity-const';
+import { t } from '../i18n/i18n';
 import result from '../model/result';
 import { streamText, convertToModelMessages, stepCountIs } from 'ai';
 import { buildTools, executeConfirmedTool } from '../agent/tools';
@@ -41,7 +45,7 @@ app.post('/agent/chat', async (c) => {
 
   let modelMessages;
   try {
-    modelMessages = await convertToModelMessages(normalizedMessages);
+    modelMessages = await convertToModelMessages(normalizedMessages, { ignoreIncompleteToolCalls: true });
   } catch (convErr) {
     console.warn('[agent/chat] convertToModelMessages failed, using fallback:', convErr);
     modelMessages = normalizedMessages.map(m => {
@@ -103,8 +107,57 @@ app.post('/agent/confirm', async (c) => {
   if (!user) return c.json(result.fail('user-not-found'), 404);
   const { name, args } = await c.req.json();
   if (!['sendDraft', 'deleteEmail'].includes(name)) return c.json(result.fail('unknown-tool'), 400);
+
+  // Permission checks
+  const isAdmin = user.email === c.env.admin;
+  if (!isAdmin) {
+    const permKeys = await permService.userPermKeys(c, userId);
+    if (name === 'sendDraft' && !permKeys.includes('email:send')) {
+      return c.json(result.fail(t('unauthorized') || 'unauthorized'), 403);
+    }
+    if (name === 'deleteEmail' && !permKeys.includes('email:delete')) {
+      return c.json(result.fail(t('unauthorized') || 'unauthorized'), 403);
+    }
+  }
+
   const r = await executeConfirmedTool({ env: c.env, userId, userEmail: user.email, name, args });
   return c.json(result.ok(r));
+});
+
+app.get('/agent/preview', async (c) => {
+  const userId = userContext.getUserId(c);
+  if (!userId) return c.json(result.fail('unauthorized'), 401);
+  const name = c.req.query('name');
+  const id = Number(c.req.query('id'));
+  if (!id) return c.json(result.fail('invalid-id'), 400);
+
+  if (name === 'sendDraft') {
+    const draft = await emailService.detail(c, id, userId);
+    if (!draft || draft.type !== emailConst.type.SEND || draft.status !== emailConst.status.SAVING) {
+      return c.json(result.fail('draft-not-found'), 404);
+    }
+    const cleanText = (draft.text || draft.content?.replace(/<[^>]+>/g, ' ') || '').replace(/\s+/g, ' ').trim();
+    return c.json(result.ok({
+      id: draft.emailId,
+      to: draft.toEmail,
+      subject: draft.subject || '',
+      preview: cleanText.slice(0, 160),
+    }));
+  }
+
+  if (name === 'deleteEmail') {
+    const emailRow = await emailService.detail(c, id, userId);
+    if (!emailRow) return c.json(result.fail('email-not-found'), 404);
+    const cleanText = (emailRow.text || emailRow.content?.replace(/<[^>]+>/g, ' ') || '').replace(/\s+/g, ' ').trim();
+    return c.json(result.ok({
+      id: emailRow.emailId,
+      from: emailRow.sendEmail,
+      subject: emailRow.subject || '',
+      preview: cleanText.slice(0, 160),
+    }));
+  }
+
+  return c.json(result.fail('unknown-preview'), 400);
 });
 
 app.get('/agent/state', async (c) => {

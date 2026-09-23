@@ -297,26 +297,26 @@ export async function executeConfirmedTool({ env, userId, userEmail, name, args 
   if (name === 'sendDraft') {
     const draftId = Number(args?.draftId);
     if (!draftId) return { error: 'Invalid draftId' };
-    const draft = await emailService.detail(c, draftId, userId);
-    if (!draft) return { error: 'Draft not found' };
-    const fromEmail = draft.sendEmail || userEmail;
-    const r = await cfEmailService.send(env, {
-      from: { email: fromEmail, name: fromEmail.split('@')[0] },
-      to: draft.toEmail,
-      subject: draft.subject,
-      html: draft.content,
-      text: draft.text,
-      headers: draft.inReplyTo ? { 'In-Reply-To': draft.inReplyTo, References: draft.relation } : {},
-    });
-    await emailService.markSent(c, draftId, userId, r);
-    return { sent: true, messageId: r?.messageId || '' };
+    try {
+      return await emailService.sendDraft(c, draftId, userId);
+    } catch (err) {
+      console.error('[sendDraft] executeConfirmedTool error:', err);
+      return { error: err.message || 'Failed to send draft' };
+    }
   }
   if (name === 'deleteEmail') {
     const emailId = Number(args?.emailId);
     if (!emailId) return { error: 'Invalid emailId' };
-    if (args?.permanent) await emailService.permanentDelete(c, emailId, userId);
-    else await emailService.softDelete(c, emailId, userId);
-    return { deleted: true, permanent: Boolean(args?.permanent) };
+    try {
+      const emailRow = await emailService.detail(c, emailId, userId);
+      if (!emailRow) return { error: 'Email not found' };
+      if (args?.permanent) await emailService.permanentDelete(c, emailId, userId);
+      else await emailService.softDelete(c, emailId, userId);
+      return { deleted: true, permanent: Boolean(args?.permanent) };
+    } catch (err) {
+      console.error('[deleteEmail] executeConfirmedTool error:', err);
+      return { error: err.message || 'Failed to delete email' };
+    }
   }
   return { error: `Unknown confirmed tool: ${name}` };
 }

@@ -123,7 +123,9 @@ const pendingConfirm = computed(() => {
   return null;
 });
 
-const busy = computed(() => ['submitted', 'streaming'].includes(chat.value?.status));
+const isConfirming = ref(false);
+const hasPendingConfirm = computed(() => Boolean(pendingConfirm.value));
+const busy = computed(() => ['submitted', 'streaming'].includes(chat.value?.status) || isConfirming.value || hasPendingConfirm.value);
 const canClear = computed(() => !busy.value && Boolean(chat.value?.messages?.length));
 
 async function onSubmit() {
@@ -156,15 +158,17 @@ async function handleQuickAction(action) {
 }
 
 async function onConfirmTool({ accepted, toolCallId, toolName, args }) {
-  if (!accepted) {
-    if (typeof chat.value.addToolOutput === 'function') {
-      await chat.value.addToolOutput({ tool: toolName, toolCallId, output: { cancelled: true } });
-    } else if (typeof chat.value.addToolResult === 'function') {
-      await chat.value.addToolResult({ toolCallId, output: { cancelled: true } });
-    }
-    return;
-  }
+  if (isConfirming.value) return;
+  isConfirming.value = true;
   try {
+    if (!accepted) {
+      if (typeof chat.value.addToolOutput === 'function') {
+        await chat.value.addToolOutput({ tool: toolName, toolCallId, output: { cancelled: true } });
+      } else if (typeof chat.value.addToolResult === 'function') {
+        await chat.value.addToolResult({ toolCallId, output: { cancelled: true } });
+      }
+      return;
+    }
     const r = await http.post('/agent/confirm', { name: toolName, args });
     const output = r.data || r;
     if (typeof chat.value.addToolOutput === 'function') {
@@ -185,6 +189,8 @@ async function onConfirmTool({ accepted, toolCallId, toolName, args }) {
         errorText: err?.message || 'Execution failed',
       });
     }
+  } finally {
+    isConfirming.value = false;
   }
 }
 
@@ -321,12 +327,14 @@ function escape(s) { return String(s).replace(/[<>&]/g, c => ({'<':'&lt;','>':'&
       <ToolConfirmation
         v-if="pendingConfirm"
         :tool="pendingConfirm"
+        :submitting="isConfirming"
         @decision="onConfirmTool" />
 
       <form class="agent-input" @submit.prevent="onSubmit">
         <textarea ref="textareaRef"
                   v-model="input"
-                  :placeholder="$t('aiAgentChatPlaceholder')"
+                  :placeholder="hasPendingConfirm ? $t('aiAgentPendingConfirmHint') : $t('aiAgentChatPlaceholder')"
+                  :disabled="busy"
                   rows="2"
                   @keydown.enter.exact.prevent="onSubmit" />
         <button :disabled="busy || !input.trim()">{{ $t('aiAgentSend') }}</button>
