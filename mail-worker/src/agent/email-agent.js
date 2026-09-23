@@ -10,6 +10,7 @@ import userService from '../service/user-service';
 export class EmailAgent extends AIChatAgent {
 
   // Called by AIChatAgent when a new chat message arrives over the websocket / SSE pipe.
+  // Note: DO instance is persistent per-session; per-request activeEmailId is currently only passed via HTTP /agent/chat.
   async onChatMessage(onFinish) {
     const { userId, userEmail, persona, currentBoxName, locale } = await this._loadContext();
     const user = userId ? await userService.findById({ env: this.env }, userId) : null;

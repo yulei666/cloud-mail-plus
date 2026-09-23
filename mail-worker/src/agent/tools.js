@@ -9,6 +9,7 @@ import { email as emailEntity } from '../entity/email';
 import accountEntity from '../entity/account';
 import { isDel, emailConst } from '../const/entity-const';
 import { resolveLanguageModel } from './provider';
+import { htmlToPlainText } from '../utils/html-utils';
 
 // Tool factory — binds env + userId so each user only sees their own data.
 // `c` mirrors the Hono context shape that the rest of the codebase uses: `{ env }`.
@@ -28,14 +29,16 @@ export function buildTools({ env, userId, userEmail, user, activeEmailId }) {
         const detail = await emailService.detail(c, activeEmailId, userId);
         if (!detail) return { error: `Current email (ID: ${activeEmailId}) not found or not accessible` };
         const atts = await attService.list(c, { emailId: activeEmailId }, userId);
+        const plainText = (detail.text && detail.text.trim())
+          ? detail.text
+          : htmlToPlainText(detail.content || '');
         return {
           emailId: detail.emailId,
           from: detail.sendEmail,
           name: detail.name,
           to: detail.toEmail,
           subject: detail.subject,
-          html: (detail.content || '').slice(0, 8000),
-          text: (detail.text || '').slice(0, 8000),
+          text: plainText.slice(0, 8000),
           attachments: (atts || []).map((a, i) => ({ index: i, name: a.name, size: a.size, mime: a.mime })),
           createTime: detail.createTime,
         };
@@ -143,31 +146,28 @@ export function buildTools({ env, userId, userEmail, user, activeEmailId }) {
         if (!targetId) return { error: 'No email specified and no email is currently being viewed in the client.' };
         const detail = await emailService.detail(c, targetId, userId);
         if (!detail) return { error: `Email ${targetId} not found` };
-        const body = (detail.text || detail.content || '').slice(0, 6000);
-        let summary = '';
-        if (user && user.agentProvider !== 'workers-ai') {
-          try {
-            const m = resolveLanguageModel(c, user);
-            const res = await generateText({
-              model: m,
-              system: 'Summarize the email in 3-5 markdown bullets, then list action items under "Actions:". Match the language of the email.',
-              prompt: `Subject: ${detail.subject}\nFrom: ${detail.sendEmail}\n\n${body}`,
-            });
-            summary = res.text || '';
-          } catch (e) {
-            console.error('[summarizeEmail] custom model error:', e?.message);
-          }
-        }
-        if (!summary && env.AI) {
-          const r = await env.AI.run('@cf/moonshotai/kimi-k2.5', {
-            messages: [
-              { role: 'system', content: 'Summarize the email in 3-5 markdown bullets, then list action items under "Actions:". Match the language of the email.' },
-              { role: 'user', content: `Subject: ${detail.subject}\nFrom: ${detail.sendEmail}\n\n${body}` },
-            ],
+        const plainText = (detail.text && detail.text.trim())
+          ? detail.text
+          : htmlToPlainText(detail.content || '');
+        const body = plainText.slice(0, 6000);
+
+        const effectiveUser = user || {};
+        try {
+          const m = resolveLanguageModel(c, effectiveUser);
+          const res = await generateText({
+            model: m,
+            system: 'Summarize the email in 3-5 markdown bullets, then list action items under "Actions:". Match the language of the email.',
+            prompt: `Subject: ${detail.subject}\nFrom: ${detail.sendEmail}\n\n${body}`,
           });
-          summary = r.response || r.result?.response || JSON.stringify(r);
+          const summary = res.text || '';
+          if (!summary.trim()) {
+            return { error: 'Failed to generate summary: AI generated empty response' };
+          }
+          return { emailId: targetId, summary };
+        } catch (e) {
+          console.error('[summarizeEmail] model generation failed:', e?.message);
+          return { error: `Failed to generate summary: ${e?.message || 'unknown error'}` };
         }
-        return { emailId: targetId, summary: summary || 'Failed to generate summary' };
       },
     }),
 
@@ -217,7 +217,7 @@ export function buildTools({ env, userId, userEmail, user, activeEmailId }) {
           relation: `${original.relation || ''} ${original.messageId || ''}`.trim(),
           content: html,
           text: html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(),
-          aiMetadata: JSON.stringify({ source: 'tool', sourceEmailId: emailId, model: modelUsed }),
+          aiMetadata: JSON.stringify({ source: 'tool', sourceEmailId: targetId, model: modelUsed }),
         });
         return { draftId, preview: html.slice(0, 400), to: original.sendEmail, modelUsed };
       },

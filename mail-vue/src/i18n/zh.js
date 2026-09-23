@@ -405,7 +405,6 @@ const zh = {
     aiAgentPromptSummarize: '请帮我总结当前正在查看的邮件（ID: {id} 《{subject}》）的核心要点与关键信息。',
     aiAgentPromptTodo: '请提取当前正在查看的邮件（ID: {id} 《{subject}》）中涉及我的所有待办事项与截止时间。',
     aiAgentPromptReplyPrefix: '请帮我针对邮件 #{id} 起草一份回复：',
-    aiAgentLinkedEmail: '关联邮件 #{id}',
     translate: '翻译',
     translateBack: '显示原文',
     translationCached: '已缓存译文，点击查看',

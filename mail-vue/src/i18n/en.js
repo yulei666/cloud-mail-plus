@@ -405,7 +405,6 @@ const en = {
     aiAgentPromptSummarize: 'Please summarize the key points and core details of the email currently in view (ID: {id} "{subject}").',
     aiAgentPromptTodo: 'Please extract all action items and deadlines from the email currently in view (ID: {id} "{subject}").',
     aiAgentPromptReplyPrefix: 'Please draft a reply to email #{id}: ',
-    aiAgentLinkedEmail: 'Linked Email #{id}',
     translate: 'Translate',
     translateBack: 'Show original',
     translationCached: 'Translation cached — click to view',

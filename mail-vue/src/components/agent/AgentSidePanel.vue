@@ -42,12 +42,10 @@ const transport = new DefaultChatTransport({
     const token = localStorage.getItem('token');
     if (token) headers.set('Authorization', token);
 
-    const targetUrl = new URL(url, window.location.origin);
     if (activeEmail.value?.emailId) {
-      targetUrl.searchParams.set('activeEmailId', String(activeEmail.value.emailId));
       headers.set('X-Active-Email-Id', String(activeEmail.value.emailId));
     }
-    return fetch(targetUrl.toString(), { ...init, headers });
+    return fetch(url, { ...init, headers });
   },
 });
 
@@ -87,9 +85,11 @@ const pendingConfirm = computed(() =>
     )
 );
 
+const busy = computed(() => ['submitted', 'streaming'].includes(chat.value?.status));
+
 async function onSubmit() {
   const text = input.value.trim();
-  if (!text || chat.value.status === 'streaming') return;
+  if (!text || busy.value) return;
   input.value = '';
   await chat.value.sendMessage({ text });
 }
@@ -100,11 +100,11 @@ async function handleQuickAction(action) {
   const subject = activeEmail.value.subject || '';
 
   if (action === 'summarize') {
-    if (chat.value.status === 'streaming') return;
+    if (busy.value) return;
     const prompt = t('aiAgentPromptSummarize', { id, subject });
     await chat.value.sendMessage({ text: prompt });
   } else if (action === 'todo') {
-    if (chat.value.status === 'streaming') return;
+    if (busy.value) return;
     const prompt = t('aiAgentPromptTodo', { id, subject });
     await chat.value.sendMessage({ text: prompt });
   } else if (action === 'reply') {
@@ -179,21 +179,21 @@ function escape(s) { return String(s).replace(/[<>&]/g, c => ({'<':'&lt;','>':'&
           <button
             type="button"
             class="btn-action"
-            :disabled="chat.status === 'streaming'"
+            :disabled="busy"
             @click="handleQuickAction('summarize')">
             📝 {{ $t('aiAgentSummarizeThis') }}
           </button>
           <button
             type="button"
             class="btn-action"
-            :disabled="chat.status === 'streaming'"
+            :disabled="busy"
             @click="handleQuickAction('todo')">
             📋 {{ $t('aiAgentTodoThis') }}
           </button>
           <button
             type="button"
             class="btn-action"
-            :disabled="chat.status === 'streaming'"
+            :disabled="busy"
             @click="handleQuickAction('reply')">
             ✍️ {{ $t('aiAgentReplyThis') }}
           </button>
@@ -220,7 +220,7 @@ function escape(s) { return String(s).replace(/[<>&]/g, c => ({'<':'&lt;','>':'&
                   :placeholder="$t('aiAgentChatPlaceholder')"
                   rows="2"
                   @keydown.enter.exact.prevent="onSubmit" />
-        <button :disabled="chat.status === 'streaming' || !input.trim()">{{ $t('aiAgentSend') }}</button>
+        <button :disabled="busy || !input.trim()">{{ $t('aiAgentSend') }}</button>
       </form>
     </aside>
   </Transition>
@@ -323,7 +323,7 @@ function escape(s) { return String(s).replace(/[<>&]/g, c => ({'<':'&lt;','>':'&
 .btn-action {
   flex: 1;
   padding: 4px 6px;
-  background: #ffffff;
+  background: var(--el-bg-color, #ffffff);
   border: 1px solid var(--el-color-primary-light-5, #b3d8ff);
   color: var(--el-color-primary, #409eff);
   border-radius: 4px;
