@@ -58,8 +58,11 @@ const userService = {
 
 		const { password } = params;
 
-		if (password < 6) {
+		if (!password || password.length < 6) {
 			throw new BizError(t('pwdMinLength'));
+		}
+		if (password.length > 30) {
+			throw new BizError(t('pwdLengthLimit'));
 		}
 		const { salt, hash } = await cryptoUtils.hashPassword(password);
 		await orm(c).update(user).set({ password: hash, salt: salt }).where(eq(user.userId, userId)).run();
