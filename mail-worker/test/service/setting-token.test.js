@@ -25,7 +25,7 @@ describe('settingService tgBotToken masking and protection', () => {
 		};
 
 		const result = await settingService.get(c);
-		expect(result.tgBotToken).toBe(`${rawToken.slice(0, 20)}******`);
+		expect(result.tgBotToken).toBe(`${rawToken.slice(0, 6)}******`);
 	});
 
 	it('should remove tgBotToken in set() if it contains masked asterisks', async () => {
