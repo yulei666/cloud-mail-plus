@@ -329,7 +329,8 @@ init_db() {
   step "7/7" "Initializing D1 schema via /api/init..."
   local code
   # cloud-mail's init endpoint is GET /api/init/:secret
-  code=$(curl -s --connect-timeout 5 --max-time 10 -o /tmp/cm-init.out -w "%{http_code}" "$WORKER_URL/api/init/$JWT_SECRET" || echo "000")
+  code=$(curl -s --connect-timeout 10 --max-time 60 -o /tmp/cm-init.out -w "%{http_code}" "$WORKER_URL/api/init/$JWT_SECRET" 2>/dev/null || true)
+  [ -z "$code" ] && code="000"
   if [[ "$code" =~ ^2 ]]; then
     ok "Database initialized"
   elif [ "$code" = "409" ] || grep -qiE "already|exists" /tmp/cm-init.out 2>/dev/null; then
@@ -338,7 +339,9 @@ init_db() {
     warn "Init returned HTTP $code:"
     cat /tmp/cm-init.out 2>/dev/null || true
     echo
-    warn "You may need to run manually: curl \"$WORKER_URL/api/init/<jwt_secret>\""
+    warn "Building D1 schema & 22+ indexes may take longer on large datasets. If timed out, re-run init (statements are IF NOT EXISTS and will safely resume):"
+    warn "  curl \"$WORKER_URL/api/init/<jwt_secret>\""
+    warn "  (Or via your custom domain if workers.dev is unreachable: curl \"https://<your-custom-domain>/api/init/<jwt_secret>\")"
   fi
   rm -f /tmp/cm-init.out
 }
