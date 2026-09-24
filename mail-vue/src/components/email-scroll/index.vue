@@ -48,13 +48,12 @@
                         :key="keyCount"
         >
           <template #default="{ data: item, index }" >
-            <div :class="'email-row ' + props.type"
+            <div :class="['email-row', props.type, { 'right-checked': item.rightChecked }]"
                  :data-checked="item.checked"
                  @click="jumpDetails(item)"
                  v-if="!item.expand"
                  :key="item.emailId"
                  @contextmenu="handleContextmenu($event, item)"
-                 :style="item.rightChecked ? 'background: #FDF6EC' : ''"
             >
               <el-tooltip :disabled="!isSelectMax || item.checked" :content="t('maxSelectNotice')" placement="top">
                 <span @click.stop="handleDisabledCheckClick(item)">
@@ -1265,6 +1264,11 @@ function loadData() {
   &:hover {
     background-color: var(--email-hover-background);
     z-index: 0;
+  }
+
+  &.right-checked,
+  &.right-checked:hover {
+    background-color: var(--email-right-click-background);
   }
 
   /*&[data-checked="true"] {
