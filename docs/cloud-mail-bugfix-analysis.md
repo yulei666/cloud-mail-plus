@@ -61,7 +61,7 @@
 | **`/role/permTree` 路由不匹配** | **P0 严重安全** | 同 `8b563c5` | **是** | **必须迁移** | 路由为 `/role/permTree` 但白名单拦截写为 `/role/tree`，导致任意登录用户可免鉴权读取完整权限树。统一更名为 `/role/tree`。 |
 | **Plus 子地址越权抢注** | **P0 严重安全** | `b2d42ea` | **是** | **必须迁移** | 精确匹配优先于降级回退，普通用户注册 `admin+xxx@` 会直接截获管理员邮件。邮箱添加严格要求主地址存在且属于当前用户；注册与管理员添加用户直接禁止使用带 `+` 的子地址格式。 |
 | **修改密码长度校验失效** | **P1 核心安全** | `a54ae42` | **是** | **必须迁移** | `resetPassword` 错误使用 `password < 6`，字母及纯数字短密码均可绕过限制。需改为 `.length < 6` 并补齐 30 位上限检查。 |
-| **HTML 模板字符串注入** | **P1 稳定性/代码执行** | `b62deec` | **是** | **已就绪/待合入 XSS 分支 ✅** | Telegram 查看页邮件含 `${}` 触发任意代码执行及反引号崩溃。采用 `JSON.stringify(html).replace(/</g, '\\u003C')` 转义。(工作区已就绪并通过单测，统一合入 XSS 分支；innerHTML 引发的 DOM XSS 亦由该分支专项处理) |
+| **HTML 模板字符串注入** | **P1 稳定性/代码执行** | `b62deec` | **是** | **已合入本分支 ✅** | Telegram 查看页邮件含 `${}` 触发任意代码执行及反引号崩溃。采用 `JSON.stringify(html).replace(/</g, '\\u003C')` 转义。(已在本 bugfix 分支完成修复并通过单测；innerHTML 引发的 DOM XSS 由 XSS 分支专项处理) |
 | **TG 推送消息长度超限** | **P1 稳定性** | `bd0410d` | **是** | **必须迁移** | 长邮件超 4096 字符导致 Telegram API 400 报错，消息推送丢失。增加 3500 字符截断与 HTML 转义。 |
 | **统计查询负时区 Bug 与全表扫描** | **P1 功能与性能**| `a8c9ae3` | **是** | **强烈建议** | `'+-5 hours'` 语法错误导致西区管理员图表空白；`DATE(create_time)` 导致全表扫描。引入 `tzModifiers` 并按日期区间查询。已决定迁移前缀匹配 `LIKE ${email + '%'}` 充分利用索引。 |
 | **批量操作 SQLite 变量超限**| **P1 稳定性** | `e7dfed2` | **是** | **建议迁移** | 全量覆盖后端全部 7 处（`email-service.js:144, 640-644, 911`、`email-api.js`、`external-api.js`）`inArray(emailIds)`。前端限制 95 封，**后端必须补充分块（chunking）保底**。 |
@@ -206,9 +206,9 @@
 
 ---
 
-### 3.4 HTML 模板字符串注入与代码执行漏洞 (P1) [已就绪/待合入 XSS 分支 ✅]
+### 3.4 HTML 模板字符串注入与代码执行漏洞 (P1) [已合入本分支 ✅]
 - **上游修复**：Commit `b62deec` (`fix: mask Telegram bot token`)
-- **分支归属统一说明**：该项修复已在当前 `feat/ai-agent-enhancements` 工作区中完成修改并通过单元测试（`test/template/email-html.test.js`）。目前尚未独立 commit，其本质属于模板注入与前端执行安全范畴，**后续将统一作为 XSS 与安全防护提交，合入专门的 XSS 分支**。
+- **分支归属统一说明**：该项修复已在本 bugfix 分支中独立提交并完成验证（Commit `7c5d85c`，单测 `test/template/email-html.test.js`）。正文自身 HTML 标签引发的 DOM XSS 则由专门的 XSS 分支专项处理。
 - **文件位置**：[`mail-worker/src/template/email-html.js#L130`](file:///Users/yulei/workspace/cloud-mail-plus/mail-worker/src/template/email-html.js#L130)
 - **漏洞准确分析**：
   - `emailHtmlTemplate` 组装生成的是供 Telegram 客户端点击查看邮件详情的 Web 页面（路由为 `/telegram/getEmail/:token`），并非管理端前端页面的 iframe。
@@ -519,7 +519,7 @@
   - `account-service.add` 严格对齐上游 `!baseAccount || baseAccount.userId !== userId`，拦截抛出 `t('notOwner')`。
   - `login-service.js:register`（置于最前置公共校验处，覆盖自主注册与 OAuth 注册）与 `user-service.js:add`（管理员添加用户）入口直接禁止带 `+` 的子地址格式，拦截抛出 `t('subAddressNotAllowed')`。
 - [ ] **5. 修正用户修改密码长度校验**：在 `mail-worker/src/service/user-service.js` 的 `resetPassword` 中将 `password < 6` 修正为 `!password || password.length < 6`，并补充 30 位长度上限。
-- [x] **6. HTML 模板注入与代码执行防御**：在 `mail-worker/src/template/email-html.js` 引入 `safeHtmlJson` 并使用 Unicode 转义，解决 Telegram 查看页邮件正文含 `${}` 触发任意代码执行及反引号崩溃。（*注：修改及单测已在当前工作区就绪，作为模板注入与执行防护统一合入专门的 XSS 分支；innerHTML 导致的 DOM XSS 亦由该分支专项处理*）。
+- [x] **6. HTML 模板注入与代码执行防御**：在 `mail-worker/src/template/email-html.js` 引入 `safeHtmlJson` 并使用 Unicode 转义，解决 Telegram 查看页邮件正文含 `${}` 触发任意代码执行及反引号崩溃。（*注：已在本 bugfix 分支完成修复并通过单测；innerHTML 导致的 DOM XSS 由专门的 XSS 分支专项处理*）。
 - [ ] **7. Telegram 消息溢出截断**：在 `mail-worker/src/template/email-msg.js` 加入 3500 字符上限截断与 HTML 转义。
 
 ### Phase 2: D1 性能、稳定性与后端分块保底
