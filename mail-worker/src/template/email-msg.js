@@ -44,7 +44,6 @@ To：\u200B${escapeHtml(email.toEmail || '')}`
 
 		} else if(tgMsgTo === 'show') {
 		template += `
-
 To：\u200B${escapeHtml(email.toEmail || '')}`
 	}
 

@@ -33,4 +33,18 @@ describe('emailMsgTemplate - Telegram notification message formatting', () => {
 		expect(result.length).toBeLessThanOrEqual(3500);
 		expect(result.endsWith('...')).toBe(true);
 	});
+
+	it('should not have an extra blank line between From and To when both are shown', () => {
+		const email = {
+			subject: 'Test Subject',
+			name: 'Sender',
+			sendEmail: 'sender@example.com',
+			toEmail: 'receiver@example.com',
+			text: 'Hello',
+		};
+
+		const result = emailMsgTemplate(email, 'show', 'show', 'hide');
+		expect(result).toMatch(/From[\s\S]*?\nTo：/);
+		expect(result).not.toMatch(/From[\s\S]*?\n\nTo：/);
+	});
 });
