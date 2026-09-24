@@ -329,7 +329,7 @@ init_db() {
   step "7/7" "Initializing D1 schema via /api/init..."
   local code
   # cloud-mail's init endpoint is GET /api/init/:secret
-  code=$(curl -s -o /tmp/cm-init.out -w "%{http_code}" "$WORKER_URL/api/init/$JWT_SECRET" || echo "000")
+  code=$(curl -s --connect-timeout 5 --max-time 10 -o /tmp/cm-init.out -w "%{http_code}" "$WORKER_URL/api/init/$JWT_SECRET" || echo "000")
   if [[ "$code" =~ ^2 ]]; then
     ok "Database initialized"
   elif [ "$code" = "409" ] || grep -qiE "already|exists" /tmp/cm-init.out 2>/dev/null; then
