@@ -1,17 +1,29 @@
 <template>
   <div class="box">
     <div class="header-actions">
-      <Icon class="icon" icon="material-symbols-light:arrow-back-ios-new" width="20" height="20" @click="handleBack"/>
-      <Icon v-perm="'email:delete'" class="icon" icon="uiw:delete" width="16" height="16" @click="handleDelete"/>
+      <el-tooltip :content="$t('back')" placement="top">
+        <Icon class="icon" icon="material-symbols-light:arrow-back-ios-new" width="20" height="20" @click="handleBack"/>
+      </el-tooltip>
+      <el-tooltip :content="$t('delete')" placement="top">
+        <Icon v-perm="'email:delete'" class="icon" icon="uiw:delete" width="16" height="16" @click="handleDelete"/>
+      </el-tooltip>
       <el-tooltip :content="$t('exportEml')" placement="top">
         <Icon class="icon" icon="mdi:download" width="18" height="18" @click="handleExport"/>
       </el-tooltip>
       <span class="star" v-if="emailStore.contentData.showStar">
-        <Icon class="icon" @click="changeStar" v-if="email.isStar" icon="fluent-color:star-16" width="20" height="20"/>
-        <Icon class="icon" @click="changeStar" v-else icon="solar:star-line-duotone" width="18" height="18"/>
+        <el-tooltip :content="email.isStar ? $t('cancelStar') : $t('addStar')" placement="top">
+          <span style="display: flex; align-items: center;">
+            <Icon class="icon" @click="changeStar" v-if="email.isStar" icon="fluent-color:star-16" width="20" height="20"/>
+            <Icon class="icon" @click="changeStar" v-else icon="solar:star-line-duotone" width="18" height="18"/>
+          </span>
+        </el-tooltip>
       </span>
-      <Icon class="icon" v-if="emailStore.contentData.showReply" v-perm="'email:send'"  @click="openReply" icon="la:reply" width="21" height="21" />
-      <Icon class="icon" v-if="emailStore.contentData.showReply" v-perm="'email:send'"  @click="openForward" icon="iconoir:arrow-up-right" width="20" height="20" />
+      <el-tooltip :content="$t('reply')" placement="top" v-if="emailStore.contentData.showReply">
+        <Icon class="icon" v-perm="'email:send'"  @click="openReply" icon="la:reply" width="21" height="21" />
+      </el-tooltip>
+      <el-tooltip :content="$t('forward')" placement="top" v-if="emailStore.contentData.showReply">
+        <Icon class="icon" v-perm="'email:send'"  @click="openForward" icon="iconoir:arrow-up-right" width="20" height="20" />
+      </el-tooltip>
       <el-tooltip
           v-if="settingStore.settings.aiEnabled"
           :content="translationState === 'translated' ? $t('showOriginal') : $t('translate')"

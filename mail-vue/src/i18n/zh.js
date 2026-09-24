@@ -425,6 +425,18 @@ const zh = {
     showOriginal: '查看原文',
     alreadyInTargetLang: '邮件已是当前语言',
     translationFailed: '翻译失败，请稍后重试',
-    langUnknown: '自动检测'
+    langUnknown: '自动检测',
+    refresh: '刷新',
+    sortDesc: '时间降序',
+    sortAsc: '时间升序',
+    search: '搜索',
+    accountList: '账号列表',
+    addStar: '添加星标',
+    cancelStar: '取消星标',
+    allReceiveAccount: '全量收件模式',
+    singleReceiveAccount: '普通收件模式',
+    back: '返回',
+    addAttachment: '添加附件',
+    clearContent: '清空内容'
 }
 export default zh

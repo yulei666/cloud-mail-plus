@@ -425,7 +425,19 @@ const en = {
     showOriginal: 'Show original',
     alreadyInTargetLang: 'Email is already in target language',
     translationFailed: 'Translation failed, please retry',
-    langUnknown: 'auto'
+    langUnknown: 'auto',
+    refresh: 'Refresh',
+    sortDesc: 'Newest First',
+    sortAsc: 'Oldest First',
+    search: 'Search',
+    accountList: 'Account List',
+    addStar: 'Star',
+    cancelStar: 'Unstar',
+    allReceiveAccount: 'All Inbound Mode',
+    singleReceiveAccount: 'Standard Mode',
+    back: 'Back',
+    addAttachment: 'Add Attachment',
+    clearContent: 'Clear Content'
 }
 
 export default en

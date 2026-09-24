@@ -1,8 +1,12 @@
 <template>
   <div class="account-box">
     <div class="head-opt">
-      <Icon v-perm="'account:add'" class="icon add" icon="ion:add-outline" width="23" height="23" @click="add"/>
-      <Icon class="icon refresh" icon="ion:reload" width="18" height="18" @click="refresh"/>
+      <el-tooltip :content="$t('addAccount')" placement="top">
+        <Icon v-perm="'account:add'" class="icon add" icon="ion:add-outline" width="23" height="23" @click="add"/>
+      </el-tooltip>
+      <el-tooltip :content="$t('refresh')" placement="top">
+        <Icon class="icon refresh" icon="ion:reload" width="18" height="18" @click="refresh"/>
+      </el-tooltip>
     </div>
     <el-scrollbar class="scrollbar" ref="scrollbarRef">
       <div v-infinite-scroll="getAccountList" :infinite-scroll-distance="600" :infinite-scroll-immediate="false">
@@ -13,11 +17,17 @@
           </div>
           <div class="opt">
             <div class="send-email" @click.stop>
-              <Icon @click="setAllReceive(item)" v-if="!item.allReceive" icon="eva:email-fill" width="22" height="22" color="#fccb1a"/>
-              <Icon @click="setAllReceive(item)" v-else icon="flat-color-icons:folder" width="22" height="22" color="#23c4f1" />
+              <el-tooltip :content="item.allReceive ? $t('allReceiveAccount') : $t('singleReceiveAccount')" placement="top">
+                <span style="display: flex; align-items: center;">
+                  <Icon @click="setAllReceive(item)" v-if="!item.allReceive" icon="eva:email-fill" width="22" height="22" color="#fccb1a"/>
+                  <Icon @click="setAllReceive(item)" v-else icon="flat-color-icons:folder" width="22" height="22" color="#23c4f1" />
+                </span>
+              </el-tooltip>
             </div>
             <div class="settings" @click.stop>
-              <Icon icon="fluent-color:clipboard-24" width="22" height="22" @click.stop="copyAccount(item.email)"/>
+              <el-tooltip :content="$t('copy')" placement="top">
+                <Icon icon="fluent-color:clipboard-24" width="22" height="22" @click.stop="copyAccount(item.email)"/>
+              </el-tooltip>
               <Icon icon="fluent:settings-24-filled" width="21" height="21" color="#909399"
                     v-if="showNullSetting(item)"/>
               <el-dropdown v-else>

@@ -11,29 +11,33 @@
       <div class="header-left" :style="'padding-left:' + actionLeft">
 
         <slot name="first"></slot>
-        <Icon class="icon reload" icon="ion:reload" width="18" height="18" @click="refresh"/>
-        <Icon v-perm="'email:delete'" class="icon delete" icon="uiw:delete" width="16" height="16"
-              v-if="getSelectedMailsIds().length > 0"
-              @click="handleDelete"/>
-        <el-tooltip :content="$t('permanentDelete')" placement="top">
+        <el-tooltip :content="$t('refresh')" placement="top">
+          <Icon class="icon reload" icon="ion:reload" width="18" height="18" @click="refresh"/>
+        </el-tooltip>
+        <el-tooltip :content="$t('delete')" placement="top" v-if="getSelectedMailsIds().length > 0">
+          <Icon v-perm="'email:delete'" class="icon delete" icon="uiw:delete" width="16" height="16"
+                @click="handleDelete"/>
+        </el-tooltip>
+        <el-tooltip :content="$t('permanentDelete')" placement="top" v-if="getSelectedMailsIds().length > 0">
           <Icon v-perm="'email:delete'" class="icon delete" icon="mdi:delete-forever" width="18" height="18"
-                v-if="getSelectedMailsIds().length > 0"
                 @click="handlePermanentDelete"/>
         </el-tooltip>
-        <el-tooltip :content="$t('batchExport')" placement="top">
+        <el-tooltip :content="$t('batchExport')" placement="top" v-if="getSelectedMailsIds().length > 0">
           <Icon class="icon" icon="mdi:download" width="18" height="18"
-                v-if="getSelectedMailsIds().length > 0"
                 @click="handleBatchExport"/>
         </el-tooltip>
-        <Icon v-perm="'email:delete'" class="icon delete" icon="fluent:mail-read-20-regular" width="21" height="21"
-              v-if="getSelectedMailsIds().length > 0 && showUnread"
-              @click="handleRead"/>
+        <el-tooltip :content="$t('markAsRead')" placement="top" v-if="getSelectedMailsIds().length > 0 && showUnread">
+          <Icon v-perm="'email:delete'" class="icon delete" icon="fluent:mail-read-20-regular" width="21" height="21"
+                @click="handleRead"/>
+        </el-tooltip>
       </div>
 
       <div class="header-right">
         <span class="email-count" v-if="total">{{ $t('emailCount', {total: total}) }}</span>
-        <Icon v-if="showAccountIcon" class="more-icon icon" width="16" height="16" icon="akar-icons:dot-grid-fill"
-              @click="changeAccountShow"/>
+        <el-tooltip :content="$t('accountList')" placement="top" v-if="showAccountIcon">
+          <Icon class="more-icon icon" width="16" height="16" icon="akar-icons:dot-grid-fill"
+                @click="changeAccountShow"/>
+        </el-tooltip>
       </div>
     </div>
 
@@ -64,8 +68,12 @@
                 </span>
               </el-tooltip>
               <div @click.stop="starChange(item)" class="pc-star" v-if="showStar">
-                <Icon v-if="item.isStar" icon="fluent-color:star-16" width="20" height="20"/>
-                <Icon v-else icon="solar:star-line-duotone" width="18" height="18"/>
+                <el-tooltip :content="item.isStar ? $t('cancelStar') : $t('addStar')" placement="top">
+                  <span style="display: flex; align-items: center;">
+                    <Icon v-if="item.isStar" icon="fluent-color:star-16" width="20" height="20"/>
+                    <Icon v-else icon="solar:star-line-duotone" width="18" height="18"/>
+                  </span>
+                </el-tooltip>
               </div>
               <div v-if="!showStar"></div>
               <div class="title" :class="accountShow ? 'title-column' : 'title-column'">

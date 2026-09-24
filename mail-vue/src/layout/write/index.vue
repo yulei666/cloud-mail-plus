@@ -47,10 +47,18 @@
         <tinyEditor :def-value="defValue" ref="editor" @change="change" @focus="focusChange" />
         <div class="button-item">
           <div class="att-add" @click="chooseFile">
-            <Icon icon="iconamoon:attachment-fill" width="24" height="24"/>
+            <el-tooltip :content="$t('addAttachment')" placement="top">
+              <span style="display: flex; align-items: center;">
+                <Icon icon="iconamoon:attachment-fill" width="24" height="24"/>
+              </span>
+            </el-tooltip>
           </div>
           <div class="att-clear" @click="clearContent">
-            <Icon icon="icon-park-outline:clear-format" width="24" height="24 "/>
+            <el-tooltip :content="$t('clearContent')" placement="top">
+              <span style="display: flex; align-items: center;">
+                <Icon icon="icon-park-outline:clear-format" width="24" height="24 "/>
+              </span>
+            </el-tooltip>
           </div>
           <div class="att-list">
             <div class="att-item" v-for="(item,index) in form.attachments" :key="index">
