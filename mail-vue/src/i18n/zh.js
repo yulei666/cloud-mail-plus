@@ -441,8 +441,6 @@ const zh = {
     writeEmail: '写信',
     lightMode: '浅色模式',
     darkMode: '深色模式',
-    switchZh: '切换中文',
-    switchEn: '切换英文',
     notice: '公告',
     collapseMenu: '折叠菜单',
     expandMenu: '展开菜单'

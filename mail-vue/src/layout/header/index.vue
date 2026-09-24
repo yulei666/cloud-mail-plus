@@ -22,7 +22,7 @@
           <Icon v-else icon="solar:moon-linear"/>
         </div>
       </el-tooltip>
-      <el-tooltip :content="settingStore.lang === 'en' ? $t('switchZh') : $t('switchEn')" placement="bottom">
+      <el-tooltip :content="settingStore.lang === 'en' ? '切换中文' : 'Switch to English'" placement="bottom">
         <div class="icon-item" @click="changeLang(settingStore.lang === 'en' ? 'zh' : 'en')" style="cursor:pointer;font-size:13px;font-weight:600;opacity:0.75;">
           {{ settingStore.lang === 'en' ? '中' : 'EN' }}
         </div>
