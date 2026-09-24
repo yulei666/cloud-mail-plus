@@ -241,11 +241,16 @@ const accountService = {
 		num = (num - 1) * size;
 
 		const userRow = await userService.selectByIdIncludeDel(c, userId);
+		if (!userRow) {
+			return { list: [], total: 0 };
+		}
 
-		const list = await orm(c).select().from(account).where(and(eq(account.userId, userId),ne(account.email,userRow.email))).limit(size).offset(num);
-		const { total } = await orm(c).select({ total: count() }).from(account).where(eq(account.userId, userId)).get();
+		const [list, totalRow] = await Promise.all([
+			orm(c).select().from(account).where(and(eq(account.userId, userId), ne(account.email, userRow.email))).limit(size).offset(num),
+			orm(c).select({ total: count() }).from(account).where(eq(account.userId, userId)).get(),
+		]);
 
-		return { list, total }
+		return { list, total: totalRow.total };
 	},
 
 	async physicsDelete(c, params) {

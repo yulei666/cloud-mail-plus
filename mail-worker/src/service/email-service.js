@@ -687,6 +687,9 @@ const emailService = {
 
 	updateEmailStatus(c, params) {
 		const { status, resendEmailId, message } = params;
+		if (!resendEmailId) {
+			return null;
+		}
 		return orm(c).update(email).set({
 			status: status,
 			message: message
