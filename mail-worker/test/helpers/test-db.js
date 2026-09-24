@@ -57,3 +57,42 @@ export function createTestDb() {
 	const db = drizzle(sqlite);
 	return { sqlite, db };
 }
+
+export function createD1Adapter(sqlite) {
+	return {
+		prepare(sql) {
+			return {
+				bind(...args) {
+					return {
+						all: async () => ({ results: sqlite.prepare(sql).all(...args) }),
+						run: async () => sqlite.prepare(sql).run(...args),
+						raw: async ({ columnNames } = {}) => {
+							const stmt = sqlite.prepare(sql).raw(true);
+							const rows = stmt.all(...args);
+							if (columnNames) {
+								const cols = stmt.columns().map((c) => c.name);
+								return [cols, ...rows];
+							}
+							return rows;
+						},
+					};
+				},
+				all: async () => ({ results: sqlite.prepare(sql).all() }),
+				run: async () => sqlite.prepare(sql).run(),
+				raw: async ({ columnNames } = {}) => {
+					const stmt = sqlite.prepare(sql).raw(true);
+					const rows = stmt.all();
+					if (columnNames) {
+						const cols = stmt.columns().map((c) => c.name);
+						return [cols, ...rows];
+					}
+					return rows;
+				},
+			};
+		},
+		batch: async (statements) => {
+			return statements.map((s) => (s.all ? s.all() : s.run()));
+		},
+	};
+}
+
