@@ -136,8 +136,24 @@ const settingService = {
 			params.emailPrefixFilter = params.emailPrefixFilter + '';
 		}
 
-		if (params.tgBotToken && params.tgBotToken.includes('******')) {
+		if (params.tgBotToken === null || (typeof params.tgBotToken === 'string' && params.tgBotToken.includes('******'))) {
 			delete params.tgBotToken;
+		}
+
+		if (params.s3AccessKey === null || (typeof params.s3AccessKey === 'string' && params.s3AccessKey.includes('******'))) {
+			delete params.s3AccessKey;
+		}
+
+		if (params.s3SecretKey === null || (typeof params.s3SecretKey === 'string' && params.s3SecretKey.includes('******'))) {
+			delete params.s3SecretKey;
+		}
+
+		if (typeof params.siteKey === 'string' && params.siteKey.includes('******')) {
+			delete params.siteKey;
+		}
+
+		if (typeof params.secretKey === 'string' && params.secretKey.includes('******')) {
+			delete params.secretKey;
 		}
 
 		params.resendTokens = JSON.stringify(resendTokens);

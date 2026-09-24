@@ -29,14 +29,6 @@ describe('settingService tgBotToken masking and protection', () => {
 	});
 
 	it('should remove tgBotToken in set() if it contains masked asterisks', async () => {
-		const updateMock = vi.fn().mockReturnValue({
-			set: vi.fn().mockReturnValue({
-				returning: vi.fn().mockReturnValue({
-					get: vi.fn().mockResolvedValue({}),
-				}),
-			}),
-		});
-
 		vi.spyOn(settingService, 'query').mockResolvedValue({ resendTokens: {} });
 		vi.spyOn(settingService, 'refresh').mockResolvedValue();
 
@@ -45,12 +37,6 @@ describe('settingService tgBotToken masking and protection', () => {
 			customDomain: 'mail.example.com',
 		};
 
-		// We mock orm by overriding settingService's call or inspecting params
-		// But in settingService.set:
-		// if (params.tgBotToken && params.tgBotToken.includes('******')) { delete params.tgBotToken; }
-		// so after settingService.set, params.tgBotToken is undefined!
-
-		// Let's pass a mock c
 		const c = {
 			env: {
 				db: {
@@ -61,8 +47,6 @@ describe('settingService tgBotToken masking and protection', () => {
 			},
 		};
 
-		// Spy on orm call: since orm(c).update(setting).set({ ...params }) is called,
-		// we verify params no longer has tgBotToken
 		try {
 			await settingService.set(c, params);
 		} catch (e) {
@@ -70,5 +54,69 @@ describe('settingService tgBotToken masking and protection', () => {
 		}
 
 		expect(params.tgBotToken).toBeUndefined();
+	});
+
+	it('should remove tgBotToken, s3AccessKey, and s3SecretKey in set() if they are null', async () => {
+		vi.spyOn(settingService, 'query').mockResolvedValue({ resendTokens: {} });
+		vi.spyOn(settingService, 'refresh').mockResolvedValue();
+
+		const params = {
+			tgBotToken: null,
+			s3AccessKey: null,
+			s3SecretKey: null,
+			siteKey: 'validSiteKey******',
+			secretKey: 'validSecretKey******',
+			title: 'My Cloud Mail',
+		};
+
+		const c = {
+			env: {
+				db: {
+					prepare: () => ({
+						bind: () => ({ run: vi.fn() }),
+					}),
+				},
+			},
+		};
+
+		try {
+			await settingService.set(c, params);
+		} catch (e) {
+			// ignore orm mock failure if any
+		}
+
+		expect(params.tgBotToken).toBeUndefined();
+		expect(params.s3AccessKey).toBeUndefined();
+		expect(params.s3SecretKey).toBeUndefined();
+		expect(params.siteKey).toBeUndefined();
+		expect(params.secretKey).toBeUndefined();
+		expect(params.title).toBe('My Cloud Mail');
+	});
+
+	it('should retain tgBotToken in set() when intentionally clearing with empty string', async () => {
+		vi.spyOn(settingService, 'query').mockResolvedValue({ resendTokens: {} });
+		vi.spyOn(settingService, 'refresh').mockResolvedValue();
+
+		const params = {
+			tgBotToken: '',
+		};
+
+		const c = {
+			env: {
+				db: {
+					prepare: () => ({
+						bind: () => ({ run: vi.fn() }),
+					}),
+				},
+			},
+		};
+
+		try {
+			await settingService.set(c, params);
+		} catch (e) {
+			// ignore orm mock failure if any
+		}
+
+		expect(params.tgBotToken).toBe('');
 	});
 });
