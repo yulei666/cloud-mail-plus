@@ -7,6 +7,8 @@ export default defineConfig({
 		include: [
 			'test/unit/**/*.spec.js',
 			'test/utils/**/*.test.js',
+			'test/template/**/*.test.js',
+			'test/service/**/*.test.js',
 			'test/agent-config.test.js',
 		],
 	},

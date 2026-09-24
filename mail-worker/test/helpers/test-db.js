@@ -41,6 +41,18 @@ export function createTestDb() {
 			create_time TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			PRIMARY KEY (email_id, target_lang)
 		);
+		CREATE TABLE account (
+			account_id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+			email TEXT NOT NULL,
+			name TEXT NOT NULL DEFAULT '',
+			status INTEGER NOT NULL DEFAULT 0,
+			latest_email_time TEXT,
+			create_time TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			user_id INTEGER NOT NULL,
+			all_receive INTEGER NOT NULL DEFAULT 0,
+			sort INTEGER NOT NULL DEFAULT 0,
+			is_del INTEGER NOT NULL DEFAULT 0
+		);
 	`);
 	const db = drizzle(sqlite);
 	return { sqlite, db };
