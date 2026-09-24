@@ -437,7 +437,15 @@ const en = {
     singleReceiveAccount: 'Standard Mode',
     back: 'Back',
     addAttachment: 'Add Attachment',
-    clearContent: 'Clear Content'
+    clearContent: 'Clear Content',
+    writeEmail: 'Compose',
+    lightMode: 'Light Mode',
+    darkMode: 'Dark Mode',
+    switchZh: 'Switch to Chinese',
+    switchEn: 'Switch to English',
+    notice: 'Announcements',
+    collapseMenu: 'Collapse Menu',
+    expandMenu: 'Expand Menu'
 }
 
 export default en

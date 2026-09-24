@@ -1,27 +1,37 @@
 <template>
   <div class="header" :class="!hasPerm('email:send') ? 'not-send' : ''">
     <div class="header-btn">
-      <hanburger @click="changeAside"></hanburger>
+      <el-tooltip :content="uiStore.asideShow ? $t('collapseMenu') : $t('expandMenu')" placement="bottom">
+        <span style="display: flex; align-items: center;">
+          <hanburger @click="changeAside"></hanburger>
+        </span>
+      </el-tooltip>
       <span class="breadcrumb-item">{{ $t(route.meta.title) }}</span>
     </div>
     <div v-perm="'email:send'" class="writer-box" @click="openSend">
-      <div class="writer">
-        <Icon icon="material-symbols:edit-outline-sharp" width="22" height="22"/>
-      </div>
+      <el-tooltip :content="$t('writeEmail')" placement="bottom">
+        <div class="writer">
+          <Icon icon="material-symbols:edit-outline-sharp" width="22" height="22"/>
+        </div>
+      </el-tooltip>
     </div>
     <div class="toolbar">
-      <div v-if="uiStore.dark" class="sun-icon icon-item" @click="openDark($event)">
-        <Icon icon="mingcute:sun-fill"/>
-      </div>
-      <div v-else class="dark-icon icon-item" @click="openDark($event)">
-        <Icon icon="solar:moon-linear"/>
-      </div>
-      <div class="icon-item" @click="changeLang(settingStore.lang === 'en' ? 'zh' : 'en')" :title="settingStore.lang === 'en' ? '切换中文' : 'Switch to English'" style="cursor:pointer;font-size:13px;font-weight:600;opacity:0.75;">
-        {{ settingStore.lang === 'en' ? '中' : 'EN' }}
-      </div>
-      <div class="notice icon-item" @click="openNotice">
-        <Icon icon="streamline-plump:announcement-megaphone"/>
-      </div>
+      <el-tooltip :content="uiStore.dark ? $t('lightMode') : $t('darkMode')" placement="bottom">
+        <div class="icon-item" :class="uiStore.dark ? 'sun-icon' : 'dark-icon'" @click="openDark($event)">
+          <Icon v-if="uiStore.dark" icon="mingcute:sun-fill"/>
+          <Icon v-else icon="solar:moon-linear"/>
+        </div>
+      </el-tooltip>
+      <el-tooltip :content="settingStore.lang === 'en' ? $t('switchZh') : $t('switchEn')" placement="bottom">
+        <div class="icon-item" @click="changeLang(settingStore.lang === 'en' ? 'zh' : 'en')" style="cursor:pointer;font-size:13px;font-weight:600;opacity:0.75;">
+          {{ settingStore.lang === 'en' ? '中' : 'EN' }}
+        </div>
+      </el-tooltip>
+      <el-tooltip :content="$t('notice')" placement="bottom">
+        <div class="notice icon-item" @click="openNotice">
+          <Icon icon="streamline-plump:announcement-megaphone"/>
+        </div>
+      </el-tooltip>
       <AgentToggle />
       <el-dropdown ref="userinfoRef" @visible-change="e => userInfoShow = e" :teleported="false" popper-class="detail-dropdown">
         <div class="avatar" @click="userInfoHide" >

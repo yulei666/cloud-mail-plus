@@ -437,6 +437,14 @@ const zh = {
     singleReceiveAccount: '普通收件模式',
     back: '返回',
     addAttachment: '添加附件',
-    clearContent: '清空内容'
+    clearContent: '清空内容',
+    writeEmail: '写信',
+    lightMode: '浅色模式',
+    darkMode: '深色模式',
+    switchZh: '切换中文',
+    switchEn: '切换英文',
+    notice: '公告',
+    collapseMenu: '折叠菜单',
+    expandMenu: '展开菜单'
 }
 export default zh
