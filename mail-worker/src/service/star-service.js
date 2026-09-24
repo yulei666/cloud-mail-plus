@@ -6,7 +6,8 @@ import { and, desc, eq, lt, sql, inArray } from 'drizzle-orm';
 import email from '../entity/email';
 import { isDel } from '../const/entity-const';
 import attService from "./att-service";
-import { t } from '../i18n/i18n'
+import { t } from '../i18n/i18n';
+import { chunkArray } from '../utils/array-utils';
 const starService = {
 
 	async add(c, params, userId) {
@@ -76,7 +77,10 @@ const starService = {
 		return { list };
 	},
 	async removeByEmailIds(c, emailIds) {
-		await orm(c).delete(star).where(inArray(star.emailId, emailIds)).run();
+		const list = Array.isArray(emailIds) ? emailIds : [emailIds];
+		for (const chunk of chunkArray(list)) {
+			await orm(c).delete(star).where(inArray(star.emailId, chunk)).run();
+		}
 	}
 };
 

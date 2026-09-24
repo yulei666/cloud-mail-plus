@@ -56,8 +56,14 @@
                  @contextmenu="handleContextmenu($event, item)"
                  :style="item.rightChecked ? 'background: #FDF6EC' : ''"
             >
-              <el-checkbox :class=" props.type === 'all-email' ? 'all-email-checkbox' : 'checkbox'"
-                           v-model="item.checked" @click.stop></el-checkbox>
+              <el-tooltip :disabled="!isSelectMax || item.checked" :content="t('maxSelectNotice')" placement="top">
+                <span @click.stop="handleDisabledCheckClick(item)">
+                  <el-checkbox :class=" props.type === 'all-email' ? 'all-email-checkbox' : 'checkbox'"
+                               v-model="item.checked"
+                               :disabled="!item.checked && isSelectMax"
+                               @click.stop></el-checkbox>
+                </span>
+              </el-tooltip>
               <div @click.stop="starChange(item)" class="pc-star" v-if="showStar">
                 <Icon v-if="item.isStar" icon="fluent-color:star-16" width="20" height="20"/>
                 <Icon v-else icon="solar:star-line-duotone" width="18" height="18"/>
@@ -325,7 +331,15 @@ const dropdownRef = ref(null);
 const dropdownCloseLock = ref(false);
 const dropdownShow = ref(false);
 const rightClickEmail = ref({});
+const MAX_SELECT_COUNT = 95;
 const checkedEmailCount = ref(0);
+const isSelectMax = computed(() => checkedEmailCount.value >= MAX_SELECT_COUNT);
+
+function handleDisabledCheckClick(item) {
+  if (!item.checked && isSelectMax.value) {
+    ElMessage.warning(t('maxSelectNotice'));
+  }
+}
 let timer = null
 const position = ref(
     DOMRect.fromRect({
@@ -793,7 +807,22 @@ function addItem(email) {
 }
 
 function handleCheckAllChange(val) {
-  emailList.forEach(item => item.checked = val);
+  if (val) {
+    let count = 0;
+    emailList.forEach(item => {
+      if (count < MAX_SELECT_COUNT) {
+        item.checked = true;
+        count++;
+      } else {
+        item.checked = false;
+      }
+    });
+    if (emailList.length > MAX_SELECT_COUNT) {
+      ElMessage.warning(t('maxSelectNotice'));
+    }
+  } else {
+    emailList.forEach(item => item.checked = false);
+  }
   isIndeterminate.value = false;
 }
 
@@ -809,8 +838,9 @@ function getSelectedDraftsIds() {
 function updateCheckStatus() {
   const checkedCount = emailList.filter(item => item.checked).length;
   checkedEmailCount.value = checkedCount;
-  checkAll.value = checkedCount === emailList.length;
-  isIndeterminate.value = checkedCount > 0 && checkedCount < emailList.length;
+  const atMax = checkedCount >= MAX_SELECT_COUNT;
+  checkAll.value = emailList.length > 0 && (checkedCount === emailList.length || atMax);
+  isIndeterminate.value = checkedCount > 0 && !checkAll.value;
 }
 
 function jumpDetails(email) {

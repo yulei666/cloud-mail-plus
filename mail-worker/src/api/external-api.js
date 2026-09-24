@@ -13,8 +13,10 @@ import { emailConst, settingConst, isDel } from '../const/entity-const';
 import emailUtils from '../utils/email-utils';
 import orm from '../entity/orm';
 import email from '../entity/email';
+import { emailTranslation } from '../entity/email-translation';
 import { att } from '../entity/att';
 import { eq, inArray, and, gte } from 'drizzle-orm';
+import { chunkArray } from '../utils/array-utils';
 
 /**
  * External API for other apps to send email through Cloud-Mail.
@@ -379,18 +381,18 @@ app.post('/external/email/batch-delete', async (c) => {
 	if (!emailIds || !Array.isArray(emailIds) || emailIds.length === 0) {
 		throw new BizError('emailIds array is required');
 	}
-	if (emailIds.length > 100) {
-		throw new BizError('Maximum 100 emails per batch');
-	}
 
 	const ids = emailIds.map(Number).filter(id => !isNaN(id));
 
-	if (permanent) {
-		await attService.removeByEmailIds(c, ids);
-		await starService.removeByEmailIds(c, ids);
-		await orm(c).delete(email).where(inArray(email.emailId, ids)).run();
-	} else {
-		await orm(c).update(email).set({ isDel: isDel.DELETE }).where(inArray(email.emailId, ids)).run();
+	for (const chunk of chunkArray(ids)) {
+		if (permanent) {
+			await attService.removeByEmailIds(c, chunk);
+			await starService.removeByEmailIds(c, chunk);
+			await orm(c).delete(emailTranslation).where(inArray(emailTranslation.emailId, chunk)).run();
+			await orm(c).delete(email).where(inArray(email.emailId, chunk)).run();
+		} else {
+			await orm(c).update(email).set({ isDel: isDel.DELETE }).where(inArray(email.emailId, chunk)).run();
+		}
 	}
 
 	return c.json(result.ok({ deleted: ids.length, permanent: !!permanent }));

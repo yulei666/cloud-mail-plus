@@ -8,7 +8,9 @@ import emlService from '../service/eml-service';
 import { buildZip } from '../utils/zip-utils';
 import orm from '../entity/orm';
 import email from '../entity/email';
+import { emailTranslation } from '../entity/email-translation';
 import { eq, and, inArray } from 'drizzle-orm';
+import { chunkArray } from '../utils/array-utils';
 
 app.get('/email/list', async (c) => {
 	const data = await emailService.list(c, c.req.query(), userContext.getUserId(c));
@@ -32,19 +34,25 @@ app.delete('/email/permanentDelete', async (c) => {
 	const emailIdList = emailIds.split(',').map(Number);
 
 	// Verify ownership — only delete emails belonging to this user
-	const userEmails = await orm(c).select({ emailId: email.emailId })
-		.from(email)
-		.where(and(eq(email.userId, userId), inArray(email.emailId, emailIdList)))
-		.all();
+	let ownedIds = [];
+	for (const chunk of chunkArray(emailIdList)) {
+		const userEmails = await orm(c).select({ emailId: email.emailId })
+			.from(email)
+			.where(and(eq(email.userId, userId), inArray(email.emailId, chunk)))
+			.all();
+		ownedIds.push(...userEmails.map(e => e.emailId));
+	}
 
-	const ownedIds = userEmails.map(e => e.emailId);
 	if (ownedIds.length === 0) {
 		return c.json(result.ok());
 	}
 
-	await attService.removeByEmailIds(c, ownedIds);
-	await starService.removeByEmailIds(c, ownedIds);
-	await orm(c).delete(email).where(inArray(email.emailId, ownedIds)).run();
+	for (const chunk of chunkArray(ownedIds)) {
+		await attService.removeByEmailIds(c, chunk);
+		await starService.removeByEmailIds(c, chunk);
+		await orm(c).delete(emailTranslation).where(inArray(emailTranslation.emailId, chunk)).run();
+		await orm(c).delete(email).where(inArray(email.emailId, chunk)).run();
+	}
 
 	return c.json(result.ok());
 });

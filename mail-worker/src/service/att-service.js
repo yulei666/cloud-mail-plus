@@ -9,6 +9,7 @@ import { parseHTML } from 'linkedom';
 import { v4 as uuidv4 } from 'uuid';
 import domainUtils from '../utils/domain-uitls';
 import settingService from "./setting-service";
+import { chunkArray } from '../utils/array-utils';
 
 const attService = {
 
@@ -224,45 +225,53 @@ const attService = {
 		await this.removeAttByField(c, 'email_id', emailIds);
 	},
 
-	selectByEmailIds(c, emailIds) {
-		return orm(c).select().from(att).where(
-			and(
-				inArray(att.emailId, emailIds),
-				eq(att.type, attConst.type.ATT)
-			))
-			.all();
+	async selectByEmailIds(c, emailIds) {
+		const list = Array.isArray(emailIds) ? emailIds : [emailIds];
+		const results = [];
+		for (const chunk of chunkArray(list)) {
+			const rows = await orm(c).select().from(att).where(
+				and(
+					inArray(att.emailId, chunk),
+					eq(att.type, attConst.type.ATT)
+				))
+				.all();
+			results.push(...rows);
+		}
+		return results;
 	},
 
 	async removeAttByField(c, fieldName, fieldValues) {
+		const list = Array.isArray(fieldValues) ? fieldValues : [fieldValues];
+		for (const chunk of chunkArray(list, 40)) {
+			const sqlList = [];
 
-		const sqlList = [];
+			chunk.forEach(value => {
 
-		fieldValues.forEach(value => {
+				sqlList.push(
 
-			sqlList.push(
+					c.env.db.prepare(
+						`SELECT a.key, a.att_id
+							FROM attachments a
+								   JOIN (SELECT key
+										 FROM attachments
+										 GROUP BY key
+										 HAVING COUNT (*) = 1) t
+										ON a.key = t.key
+							WHERE a.${fieldName} = ?;`
+						).bind(value)
+				)
 
-				c.env.db.prepare(
-					`SELECT a.key, a.att_id
-						FROM attachments a
-							   JOIN (SELECT key
-									 FROM attachments
-									 GROUP BY key
-									 HAVING COUNT (*) = 1) t
-									ON a.key = t.key
-						WHERE a.${fieldName} = ?;`
-					).bind(value)
-			)
+				sqlList.push(c.env.db.prepare(`DELETE FROM attachments WHERE ${fieldName} = ?`).bind(value))
 
-			sqlList.push(c.env.db.prepare(`DELETE FROM attachments WHERE ${fieldName} = ?`).bind(value))
+			});
 
-		});
+			const attListResult = await c.env.db.batch(sqlList);
 
-		const attListResult = await c.env.db.batch(sqlList);
+			const delKeyList = attListResult.flatMap(r => r.results ? r.results.map(row => row.key) : []);
 
-		const delKeyList = attListResult.flatMap(r => r.results ? r.results.map(row => row.key) : []);
-
-		if (delKeyList.length > 0) {
-			await this.batchDelete(c, delKeyList);
+			if (delKeyList.length > 0) {
+				await this.batchDelete(c, delKeyList);
+			}
 		}
 
 	},

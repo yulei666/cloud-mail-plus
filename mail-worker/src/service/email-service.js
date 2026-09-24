@@ -23,6 +23,7 @@ import domainUtils from '../utils/domain-uitls';
 import account from "../entity/account";
 import { att } from '../entity/att';
 import telegramService from './telegram-service';
+import { chunkArray } from '../utils/array-utils';
 
 const emailService = {
 
@@ -141,12 +142,14 @@ const emailService = {
 
 	async delete(c, params, userId) {
 		const { emailIds } = params;
-		const emailIdList = emailIds.split(',').map(Number);
-		await orm(c).update(email).set({ isDel: isDel.DELETE }).where(
-			and(
-				eq(email.userId, userId),
-				inArray(email.emailId, emailIdList)))
-			.run();
+		const emailIdList = (Array.isArray(emailIds) ? emailIds : emailIds.split(',')).map(Number);
+		for (const chunk of chunkArray(emailIdList)) {
+			await orm(c).update(email).set({ isDel: isDel.DELETE }).where(
+				and(
+					eq(email.userId, userId),
+					inArray(email.emailId, chunk)))
+				.run();
+		}
 	},
 
 	receive(c, params, cidAttList, r2domain) {
@@ -637,17 +640,22 @@ const emailService = {
 
 	async physicsDelete(c, params) {
 		let { emailIds } = params;
-		emailIds = emailIds.split(',').map(Number);
-		await attService.removeByEmailIds(c, emailIds);
-		await starService.removeByEmailIds(c, emailIds);
-		await orm(c).delete(emailTranslation).where(inArray(emailTranslation.emailId, emailIds)).run();
-		await orm(c).delete(email).where(inArray(email.emailId, emailIds)).run();
+		const emailIdList = (Array.isArray(emailIds) ? emailIds : emailIds.split(',')).map(Number);
+		for (const chunk of chunkArray(emailIdList)) {
+			await attService.removeByEmailIds(c, chunk);
+			await starService.removeByEmailIds(c, chunk);
+			await orm(c).delete(emailTranslation).where(inArray(emailTranslation.emailId, chunk)).run();
+			await orm(c).delete(email).where(inArray(email.emailId, chunk)).run();
+		}
 	},
 
 	async physicsDeleteUserIds(c, userIds) {
-		await attService.removeByUserIds(c, userIds);
-		await orm(c).delete(emailTranslation).where(inArray(emailTranslation.userId, userIds)).run();
-		await orm(c).delete(email).where(inArray(email.userId, userIds)).run();
+		const userIdList = Array.isArray(userIds) ? userIds : [userIds];
+		for (const chunk of chunkArray(userIdList)) {
+			await attService.removeByUserIds(c, chunk);
+			await orm(c).delete(emailTranslation).where(inArray(emailTranslation.userId, chunk)).run();
+			await orm(c).delete(email).where(inArray(email.userId, chunk)).run();
+		}
 	},
 
 	updateEmailStatus(c, params) {
@@ -890,9 +898,10 @@ const emailService = {
 			return;
 		}
 
-		await attService.removeByEmailIds(c, emailIds);
-
-		await orm(c).delete(emailTranslation).where(inArray(emailTranslation.emailId, emailIds)).run();
+		for (const chunk of chunkArray(emailIds)) {
+			await attService.removeByEmailIds(c, chunk);
+			await orm(c).delete(emailTranslation).where(inArray(emailTranslation.emailId, chunk)).run();
+		}
 		await orm(c).delete(email).where(conditions.length > 1 ? and(...conditions) : conditions[0]).run();
 	},
 
@@ -901,14 +910,19 @@ const emailService = {
 		const emailIdsRow = await orm(c).select({emailId: email.emailId}).from(email).where(eq(email.accountId, accountId)).all();
 		const emailIds = emailIdsRow.map(row => row.emailId);
 		if (emailIds.length > 0) {
-			await orm(c).delete(emailTranslation).where(inArray(emailTranslation.emailId, emailIds)).run();
+			for (const chunk of chunkArray(emailIds)) {
+				await orm(c).delete(emailTranslation).where(inArray(emailTranslation.emailId, chunk)).run();
+			}
 		}
 		await orm(c).delete(email).where(eq(email.accountId, accountId)).run();
 	},
 
 	async read(c, params, userId) {
 		const { emailIds } = params;
-		await orm(c).update(email).set({ unread: emailConst.unread.READ }).where(and(eq(email.userId, userId), inArray(email.emailId, emailIds)));
+		const emailIdList = (Array.isArray(emailIds) ? emailIds : emailIds.split(',')).map(Number);
+		for (const chunk of chunkArray(emailIdList)) {
+			await orm(c).update(email).set({ unread: emailConst.unread.READ }).where(and(eq(email.userId, userId), inArray(email.emailId, chunk))).run();
+		}
 	},
 
 	// --- AI agent helpers (draft + send + delete primitives) ---

@@ -12,6 +12,7 @@ const en = {
     SystemSettings: 'System Settings',
     noMoreData: 'No more data',
     noMessagesFound: 'No messages found',
+    maxSelectNotice: 'Maximum 95 emails per selection',
     addAccount: 'Add Email Address',
     emailAccount: 'Email',
     account: 'Address',
