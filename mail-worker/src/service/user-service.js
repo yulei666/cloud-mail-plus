@@ -306,6 +306,10 @@ const userService = {
 
 		const { email, type, password } = params;
 
+		if (email.includes('+')) {
+			throw new BizError(t('subAddressNotAllowed'));
+		}
+
 		if (!c.env.domain.includes(emailUtils.getDomain(email))) {
 			throw new BizError(t('notEmailDomain'));
 		}

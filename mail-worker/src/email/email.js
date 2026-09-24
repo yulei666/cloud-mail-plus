@@ -49,9 +49,9 @@ export async function email(message, env, ctx) {
 		// Plus-addressing fallback: strip "+suffix" so jane.doe+anything@domain
 		// delivers into jane.doe@domain mailbox (Gmail/Outlook-style).
 		if (!account) {
-			const canonical = message.to.replace(/^([^@+]+)\+[^@]*@/, '$1@');
-			if (canonical !== message.to) {
-				account = await accountService.selectByEmailIncludeDel({ env: env }, canonical);
+			const baseEmail = emailUtils.getBaseEmail(message.to);
+			if (baseEmail && baseEmail !== message.to) {
+				account = await accountService.selectByEmailIncludeDel({ env: env }, baseEmail);
 			}
 		}
 

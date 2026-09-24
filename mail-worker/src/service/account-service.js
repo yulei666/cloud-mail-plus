@@ -47,6 +47,14 @@ const accountService = {
 			throw new BizError(t('banEmailPrefix'));
 		}
 
+		if (email.includes('+')) {
+			const baseEmail = emailUtils.getBaseEmail(email);
+			const baseAccount = await this.selectByEmailIncludeDel(c, baseEmail);
+			if (!baseAccount || baseAccount.userId !== userId) {
+				throw new BizError(t('notOwner'));
+			}
+		}
+
 		let accountRow = await this.selectByEmailIncludeDel(c, email);
 
 		if (accountRow && accountRow.isDel === isDel.DELETE) {

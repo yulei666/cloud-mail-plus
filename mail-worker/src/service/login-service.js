@@ -41,6 +41,10 @@ const loginService = {
 			throw new BizError(t('notEmail'));
 		}
 
+		if (email.includes('+')) {
+			throw new BizError(t('subAddressNotAllowed'));
+		}
+
 		if (emailUtils.getName(email).length < minEmailPrefix) {
 			throw new BizError(t('minEmailPrefix', { msg: minEmailPrefix } ));
 		}

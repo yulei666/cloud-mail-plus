@@ -73,6 +73,8 @@ const zh = {
 	aiRateLimited: '翻译请求过多，请稍后重试',
 	draftNotExist: '草稿不存在或已被发送/删除',
 	receiveEmailEmpty: '收件人不能为空',
+	notOwner: '无权使用该主邮箱的子地址',
+	subAddressNotAllowed: '不支持使用子地址注册或创建用户',
 	perms: {
 		"邮件": "邮件",
 		"邮件发送": "邮件发送",
