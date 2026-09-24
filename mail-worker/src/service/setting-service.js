@@ -101,6 +101,7 @@ const settingService = {
 
 		settingRow.s3AccessKey = settingRow.s3AccessKey ? `${settingRow.s3AccessKey.slice(0, 12)}******` : null;
 		settingRow.s3SecretKey = settingRow.s3SecretKey ? `${settingRow.s3SecretKey.slice(0, 12)}******` : null;
+		settingRow.tgBotToken = settingRow.tgBotToken ? `${settingRow.tgBotToken.slice(0, 20)}******` : null;
 		settingRow.hasR2 = !!c.env.r2
 
 		let regVerifyOpen = false
@@ -133,6 +134,10 @@ const settingService = {
 
 		if (Array.isArray(params.emailPrefixFilter)) {
 			params.emailPrefixFilter = params.emailPrefixFilter + '';
+		}
+
+		if (params.tgBotToken && params.tgBotToken.includes('******')) {
+			delete params.tgBotToken;
 		}
 
 		params.resendTokens = JSON.stringify(resendTokens);
