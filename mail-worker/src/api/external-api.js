@@ -382,6 +382,10 @@ app.post('/external/email/batch-delete', async (c) => {
 		throw new BizError('emailIds array is required');
 	}
 
+	if (emailIds.length > 100) {
+		throw new BizError('Maximum 100 emails per batch');
+	}
+
 	const ids = emailIds.map(Number).filter(id => !isNaN(id));
 
 	for (const chunk of chunkArray(ids)) {
