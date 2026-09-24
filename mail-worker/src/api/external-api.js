@@ -364,9 +364,12 @@ app.delete('/external/email/by-message-id/:messageId/permanent', async (c) => {
 	}
 
 	const ids = rows.map(r => r.emailId);
-	await attService.removeByEmailIds(c, ids);
-	await starService.removeByEmailIds(c, ids);
-	await orm(c).delete(email).where(inArray(email.emailId, ids)).run();
+	for (const chunk of chunkArray(ids)) {
+		await attService.removeByEmailIds(c, chunk);
+		await starService.removeByEmailIds(c, chunk);
+		await orm(c).delete(emailTranslation).where(inArray(emailTranslation.emailId, chunk)).run();
+		await orm(c).delete(email).where(inArray(email.emailId, chunk)).run();
+	}
 
 	return c.json(result.ok({ messageId, to: toFilter || null, matched: ids.length, permanentlyDeleted: ids.length, emailIds: ids }));
 });
