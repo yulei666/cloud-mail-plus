@@ -751,7 +751,7 @@
 </template>
 
 <script setup>
-import {computed, defineOptions, reactive, ref} from "vue";
+import {computed, defineOptions, nextTick, reactive, ref} from "vue";
 import {deleteBackground, setBackground, settingQuery, settingSet} from "@/request/setting.js";
 import {useSettingStore} from "@/store/setting.js";
 import {useUiStore} from "@/store/ui.js";
@@ -777,6 +777,7 @@ const hasUpdate = ref(false)
 let getUpdateErrorCount = 1;
 const {t, locale} = useI18n();
 const firstLoading = ref(true)
+const settingReady = ref(false)
 const backgroundImage = ref('')
 const localUpShow = ref(false)
 const accountStore = useAccountStore();
@@ -877,6 +878,7 @@ getSettings()
 getUpdate()
 
 function getSettings() {
+  settingReady.value = false
   settingQuery().then(settingData => {
     setting.value = settingData
     settingStore.domainList = settingData.domainList;
@@ -892,6 +894,9 @@ function getSettings() {
     resetNoticeForm()
     resetAddS3Form()
     resetEmailPrefix()
+    nextTick(() => {
+      settingReady.value = true
+    })
   })
 }
 
@@ -1156,6 +1161,7 @@ function ruleEmailSave() {
 }
 
 function doOpacityChange() {
+  if (!settingReady.value) return
   const form = {}
   form.loginOpacity = loginOpacity.value
   editSetting(form, true)
@@ -1292,12 +1298,13 @@ function cleanResendTokenForm() {
 }
 
 function beforeChange() {
-  if (settingLoading.value) return false
+  if (!settingReady.value || settingLoading.value) return false
   backupSetting()
   return true
 }
 
 function change(e) {
+  if (!settingReady.value) return
   const settingForm = {...setting.value}
   delete settingForm.siteKey
   delete settingForm.secretKey
@@ -1319,7 +1326,7 @@ function jump(href) {
 }
 
 function editSetting(settingForm, refreshStatus = true) {
-  if (settingLoading.value) return
+  if (!settingReady.value || settingLoading.value) return
   settingLoading.value = true
 
   settingSet(settingForm).then(() => {
