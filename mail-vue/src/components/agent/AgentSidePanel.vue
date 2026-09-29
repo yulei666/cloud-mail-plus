@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, watch, nextTick, shallowRef } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick, shallowRef } from 'vue';
 import { useRoute } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { Chat } from '@ai-sdk/vue';
@@ -247,11 +247,194 @@ function renderPart(part) {
   return '';
 }
 function escape(s) { return String(s).replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])); }
+
+// --- Resizable Panel Width & Input Height ---
+const MIN_PANEL_WIDTH = 340;
+const DEFAULT_PANEL_WIDTH = 420;
+const MIN_INPUT_HEIGHT = 48;
+const DEFAULT_INPUT_HEIGHT = 72;
+
+const isResizingWidth = ref(false);
+const isResizingHeight = ref(false);
+
+const localPanelWidth = ref(
+  typeof store.panelWidth === 'number' && store.panelWidth >= MIN_PANEL_WIDTH
+    ? store.panelWidth
+    : DEFAULT_PANEL_WIDTH
+);
+const localInputHeight = ref(
+  typeof store.inputHeight === 'number' && store.inputHeight >= MIN_INPUT_HEIGHT
+    ? store.inputHeight
+    : DEFAULT_INPUT_HEIGHT
+);
+
+watch(() => store.panelWidth, (val) => {
+  if (typeof val === 'number' && val >= MIN_PANEL_WIDTH && !isResizingWidth.value) {
+    localPanelWidth.value = val;
+  }
+});
+
+watch(() => store.inputHeight, (val) => {
+  if (typeof val === 'number' && val >= MIN_INPUT_HEIGHT && !isResizingHeight.value) {
+    localInputHeight.value = val;
+  }
+});
+
+let startX = 0;
+let startWidth = 0;
+
+function startResizeWidth(e) {
+  isResizingWidth.value = true;
+  startX = e.clientX;
+  startWidth = localPanelWidth.value;
+
+  document.body.style.userSelect = 'none';
+  document.body.style.cursor = 'col-resize';
+
+  window.addEventListener('mousemove', handleResizeWidth);
+  window.addEventListener('mouseup', stopResizeWidth);
+}
+
+function handleResizeWidth(e) {
+  if (!isResizingWidth.value) return;
+  const delta = startX - e.clientX; // drag left -> expand width
+  const maxWidth = Math.max(MIN_PANEL_WIDTH, Math.min(window.innerWidth - 60, 960));
+  localPanelWidth.value = Math.min(Math.max(startWidth + delta, MIN_PANEL_WIDTH), maxWidth);
+}
+
+function stopResizeWidth() {
+  if (!isResizingWidth.value) return;
+  isResizingWidth.value = false;
+  document.body.style.userSelect = '';
+  document.body.style.cursor = '';
+
+  window.removeEventListener('mousemove', handleResizeWidth);
+  window.removeEventListener('mouseup', stopResizeWidth);
+
+  store.panelWidth = Math.round(localPanelWidth.value);
+}
+
+function resetPanelWidth() {
+  localPanelWidth.value = DEFAULT_PANEL_WIDTH;
+  store.panelWidth = DEFAULT_PANEL_WIDTH;
+}
+
+function startResizeWidthTouch(e) {
+  if (e.touches?.length !== 1) return;
+  isResizingWidth.value = true;
+  startX = e.touches[0].clientX;
+  startWidth = localPanelWidth.value;
+
+  window.addEventListener('touchmove', handleResizeWidthTouch, { passive: false });
+  window.addEventListener('touchend', stopResizeWidthTouch);
+}
+
+function handleResizeWidthTouch(e) {
+  if (!isResizingWidth.value || e.touches?.length !== 1) return;
+  e.preventDefault();
+  const delta = startX - e.touches[0].clientX;
+  const maxWidth = Math.max(MIN_PANEL_WIDTH, Math.min(window.innerWidth - 40, 960));
+  localPanelWidth.value = Math.min(Math.max(startWidth + delta, MIN_PANEL_WIDTH), maxWidth);
+}
+
+function stopResizeWidthTouch() {
+  if (!isResizingWidth.value) return;
+  isResizingWidth.value = false;
+  window.removeEventListener('touchmove', handleResizeWidthTouch);
+  window.removeEventListener('touchend', stopResizeWidthTouch);
+  store.panelWidth = Math.round(localPanelWidth.value);
+}
+
+let startY = 0;
+let startHeight = 0;
+
+function startResizeHeight(e) {
+  isResizingHeight.value = true;
+  startY = e.clientY;
+  startHeight = localInputHeight.value;
+
+  document.body.style.userSelect = 'none';
+  document.body.style.cursor = 'row-resize';
+
+  window.addEventListener('mousemove', handleResizeHeight);
+  window.addEventListener('mouseup', stopResizeHeight);
+}
+
+function handleResizeHeight(e) {
+  if (!isResizingHeight.value) return;
+  const delta = startY - e.clientY; // drag up -> expand input height
+  const maxHeight = Math.min(window.innerHeight * 0.45, 360);
+  localInputHeight.value = Math.min(Math.max(startHeight + delta, MIN_INPUT_HEIGHT), maxHeight);
+}
+
+function stopResizeHeight() {
+  if (!isResizingHeight.value) return;
+  isResizingHeight.value = false;
+  document.body.style.userSelect = '';
+  document.body.style.cursor = '';
+
+  window.removeEventListener('mousemove', handleResizeHeight);
+  window.removeEventListener('mouseup', stopResizeHeight);
+
+  store.inputHeight = Math.round(localInputHeight.value);
+}
+
+function resetInputHeight() {
+  localInputHeight.value = DEFAULT_INPUT_HEIGHT;
+  store.inputHeight = DEFAULT_INPUT_HEIGHT;
+}
+
+function startResizeHeightTouch(e) {
+  if (e.touches?.length !== 1) return;
+  isResizingHeight.value = true;
+  startY = e.touches[0].clientY;
+  startHeight = localInputHeight.value;
+
+  window.addEventListener('touchmove', handleResizeHeightTouch, { passive: false });
+  window.addEventListener('touchend', stopResizeHeightTouch);
+}
+
+function handleResizeHeightTouch(e) {
+  if (!isResizingHeight.value || e.touches?.length !== 1) return;
+  e.preventDefault();
+  const delta = startY - e.touches[0].clientY;
+  const maxHeight = Math.min(window.innerHeight * 0.45, 360);
+  localInputHeight.value = Math.min(Math.max(startHeight + delta, MIN_INPUT_HEIGHT), maxHeight);
+}
+
+function stopResizeHeightTouch() {
+  if (!isResizingHeight.value) return;
+  isResizingHeight.value = false;
+  window.removeEventListener('touchmove', handleResizeHeightTouch);
+  window.removeEventListener('touchend', stopResizeHeightTouch);
+  store.inputHeight = Math.round(localInputHeight.value);
+}
+
+onBeforeUnmount(() => {
+  stopResizeWidth();
+  stopResizeHeight();
+});
 </script>
 
 <template>
   <Transition name="slide">
-    <aside v-if="visible" class="agent-panel">
+    <aside
+      v-if="visible"
+      class="agent-panel"
+      :class="{ 'is-resizing': isResizingWidth }"
+      :style="{ width: localPanelWidth + 'px' }"
+    >
+      <!-- Left edge resizer for panel width -->
+      <div
+        class="panel-resizer-left"
+        :class="{ resizing: isResizingWidth }"
+        :title="$t('aiAgentResizeWidth')"
+        @mousedown="startResizeWidth"
+        @touchstart.passive="startResizeWidthTouch"
+        @dblclick="resetPanelWidth"
+      >
+        <div class="resizer-line"></div>
+      </div>
       <header class="agent-head">
         <span class="head-title">✨ {{ $t('aiAgentChatTitle') }}</span>
         <div class="head-actions">
@@ -330,26 +513,101 @@ function escape(s) { return String(s).replace(/[<>&]/g, c => ({'<':'&lt;','>':'&
         :submitting="isConfirming"
         @decision="onConfirmTool" />
 
-      <form class="agent-input" @submit.prevent="onSubmit">
-        <textarea ref="textareaRef"
-                  v-model="input"
-                  :placeholder="hasPendingConfirm ? $t('aiAgentPendingConfirmHint') : $t('aiAgentChatPlaceholder')"
-                  :disabled="busy"
-                  rows="2"
-                  @keydown.enter.exact.prevent="onSubmit" />
-        <button :disabled="busy || !input.trim()">{{ $t('aiAgentSend') }}</button>
-      </form>
+      <!-- Input container with top resizer -->
+      <div class="agent-input-container">
+        <!-- Top edge resizer for input height -->
+        <div
+          class="input-resizer-top"
+          :class="{ resizing: isResizingHeight }"
+          :title="$t('aiAgentResizeHeight')"
+          @mousedown="startResizeHeight"
+          @touchstart.passive="startResizeHeightTouch"
+          @dblclick="resetInputHeight"
+        >
+          <div class="resizer-pill"></div>
+        </div>
+
+        <form class="agent-input" @submit.prevent="onSubmit">
+          <div class="input-main-row">
+            <textarea
+              ref="textareaRef"
+              v-model="input"
+              :placeholder="hasPendingConfirm ? $t('aiAgentPendingConfirmHint') : $t('aiAgentChatPlaceholder')"
+              :disabled="busy"
+              :style="{ height: localInputHeight + 'px' }"
+              @keydown.enter.exact.prevent="onSubmit"
+            />
+            <button
+              type="submit"
+              class="btn-send"
+              :class="{ 'is-active': input.trim() && !busy, 'is-busy': busy }"
+              :disabled="busy || !input.trim()"
+              :title="busy ? $t('aiAgentThinking') : ($t('aiAgentSend') + ' (Enter)')"
+            >
+              <Icon v-if="busy" icon="line-md:loading-loop" class="send-icon" width="16" height="16" />
+              <Icon v-else icon="fluent:send-24-filled" class="send-icon" width="16" height="16" />
+              <span class="send-text">{{ busy ? $t('aiAgentThinking') : $t('aiAgentSend') }}</span>
+            </button>
+          </div>
+          <div class="input-hint-row">
+            <span>{{ $t('aiAgentInputHint') }}</span>
+          </div>
+        </form>
+      </div>
     </aside>
   </Transition>
 </template>
 
 <style scoped>
 .agent-panel {
-  position: fixed; right: 0; top: 0; bottom: 0;
-  width: 400px; background: var(--el-bg-color, #fff);
+  position: fixed;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  background: var(--el-bg-color, #fff);
   border-left: 1px solid var(--el-border-color-light, #eee);
-  display: flex; flex-direction: column;
-  box-shadow: -4px 0 12px rgba(0,0,0,0.05); z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  box-shadow: -4px 0 16px rgba(0, 0, 0, 0.08);
+  z-index: 1000;
+  max-width: calc(100vw - 30px);
+}
+
+.agent-panel.is-resizing {
+  user-select: none;
+}
+
+/* Left panel resizer handle */
+.panel-resizer-left {
+  position: absolute;
+  left: -4px;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  cursor: col-resize;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease;
+}
+
+.panel-resizer-left:hover,
+.panel-resizer-left.resizing {
+  background: rgba(64, 158, 255, 0.12);
+}
+
+.panel-resizer-left .resizer-line {
+  width: 2px;
+  height: 100%;
+  background: transparent;
+  transition: all 0.15s ease;
+}
+
+.panel-resizer-left:hover .resizer-line,
+.panel-resizer-left.resizing .resizer-line {
+  background: var(--el-color-primary, #409eff);
+  box-shadow: 0 0 6px rgba(64, 158, 255, 0.5);
 }
 .agent-head {
   padding: 12px 16px;
@@ -523,8 +781,165 @@ function escape(s) { return String(s).replace(/[<>&]/g, c => ({'<':'&lt;','>':'&
 .tool-call, .tool-result { font-size: 12px; background: #fff8e1; padding: 6px 8px; border-radius: 4px; margin: 4px 0; }
 .tool-result { background: #e8f5e9; }
 .tool-call pre, .tool-result pre { margin: 4px 0 0; max-height: 120px; overflow: auto; font-size: 11px; }
-.agent-input { display: flex; gap: 8px; padding: 8px; border-top: 1px solid #eee; }
-.agent-input textarea { flex: 1; resize: none; padding: 6px 8px; border-radius: 4px; border: 1px solid #ddd; }
+/* Input container & Top resizer */
+.agent-input-container {
+  display: flex;
+  flex-direction: column;
+  background: var(--el-bg-color, #ffffff);
+  border-top: 1px solid var(--el-border-color-light, #eee);
+  position: relative;
+  flex-shrink: 0;
+}
+
+.input-resizer-top {
+  width: 100%;
+  height: 10px;
+  margin-top: -5px;
+  cursor: row-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  z-index: 10;
+  transition: background 0.15s ease;
+}
+
+.input-resizer-top:hover,
+.input-resizer-top.resizing {
+  background: rgba(64, 158, 255, 0.08);
+}
+
+.input-resizer-top .resizer-pill {
+  width: 36px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--el-border-color, #dcdfe6);
+  transition: all 0.15s ease;
+}
+
+.input-resizer-top:hover .resizer-pill,
+.input-resizer-top.resizing .resizer-pill {
+  background: var(--el-color-primary, #409eff);
+  width: 48px;
+  height: 4px;
+}
+
+.agent-input {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 12px 10px 12px;
+}
+
+.input-main-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+}
+
+.agent-input textarea {
+  flex: 1;
+  resize: none;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--el-border-color, #dcdfe6);
+  background: var(--el-bg-color, #ffffff);
+  color: var(--el-text-color-primary, #303133);
+  font-size: 13px;
+  line-height: 1.5;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+
+.agent-input textarea:focus {
+  outline: none;
+  border-color: var(--el-color-primary, #409eff);
+  box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.15);
+}
+
+.agent-input textarea::placeholder {
+  color: var(--el-text-color-placeholder, #a8abb2);
+  font-size: 12px;
+}
+
+.input-hint-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  color: var(--el-text-color-placeholder, #a8abb2);
+  padding: 0 2px;
+  user-select: none;
+}
+
+/* Send button new modern UI */
+.btn-send {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  align-self: flex-end;
+  height: 38px;
+  min-width: 76px;
+  padding: 0 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  border: 1px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  background: var(--el-fill-color, #f0f2f5);
+  color: var(--el-text-color-placeholder, #a8abb2);
+  margin-bottom: 1px;
+}
+
+.btn-send.is-active:not(:disabled) {
+  background: linear-gradient(135deg, var(--el-color-primary, #409eff) 0%, #2b7bdb 100%);
+  color: #ffffff;
+  border-color: #2b7bdb;
+  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.35);
+}
+
+.btn-send.is-active:not(:disabled):hover {
+  background: linear-gradient(135deg, #66b1ff 0%, var(--el-color-primary, #409eff) 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.45);
+}
+
+.btn-send.is-active:not(:disabled):active {
+  transform: translateY(0) scale(0.97);
+  box-shadow: 0 1px 4px rgba(64, 158, 255, 0.25);
+}
+
+.btn-send:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.btn-send.is-busy {
+  background: var(--el-color-primary-light-9, #ecf5ff);
+  color: var(--el-color-primary, #409eff);
+  border-color: var(--el-color-primary-light-7, #d0e7ff);
+  cursor: wait;
+  opacity: 1;
+}
+
+.send-icon {
+  flex-shrink: 0;
+}
+
+@media (max-width: 768px) {
+  .agent-panel {
+    width: 100% !important;
+    max-width: 100vw;
+  }
+  .panel-resizer-left {
+    display: none;
+  }
+}
+
 .slide-enter-from, .slide-leave-to { transform: translateX(100%); }
 .slide-enter-active, .slide-leave-active { transition: transform 0.2s ease; }
 </style>

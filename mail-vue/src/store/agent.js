@@ -4,6 +4,8 @@ import http from '@/axios/index.js';
 export const useAgentStore = defineStore('agent', {
   state: () => ({
     panelVisible: false,
+    panelWidth: 420,
+    inputHeight: 72,
     hydrated: false,
     messages: [],
     settings: {
@@ -77,6 +79,6 @@ export const useAgentStore = defineStore('agent', {
   },
 
   persist: {
-    paths: ['panelVisible'],
+    paths: ['panelVisible', 'panelWidth', 'inputHeight'],
   },
 });
