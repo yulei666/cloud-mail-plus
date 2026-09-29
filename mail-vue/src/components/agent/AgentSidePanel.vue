@@ -254,6 +254,16 @@ const DEFAULT_PANEL_WIDTH = 420;
 const MIN_INPUT_HEIGHT = 48;
 const DEFAULT_INPUT_HEIGHT = 72;
 
+function getMaxInputHeight() {
+  if (typeof window === 'undefined') return 360;
+  return Math.max(MIN_INPUT_HEIGHT, Math.min(window.innerHeight * 0.45, 360));
+}
+
+function clampInputHeight(val) {
+  const num = typeof val === 'number' && !isNaN(val) ? val : DEFAULT_INPUT_HEIGHT;
+  return Math.min(Math.max(num, MIN_INPUT_HEIGHT), getMaxInputHeight());
+}
+
 const isResizingWidth = ref(false);
 const isResizingHeight = ref(false);
 
@@ -262,11 +272,7 @@ const localPanelWidth = ref(
     ? store.panelWidth
     : DEFAULT_PANEL_WIDTH
 );
-const localInputHeight = ref(
-  typeof store.inputHeight === 'number' && store.inputHeight >= MIN_INPUT_HEIGHT
-    ? store.inputHeight
-    : DEFAULT_INPUT_HEIGHT
-);
+const localInputHeight = ref(clampInputHeight(store.inputHeight));
 
 watch(() => store.panelWidth, (val) => {
   if (typeof val === 'number' && val >= MIN_PANEL_WIDTH && !isResizingWidth.value) {
@@ -275,9 +281,19 @@ watch(() => store.panelWidth, (val) => {
 });
 
 watch(() => store.inputHeight, (val) => {
-  if (typeof val === 'number' && val >= MIN_INPUT_HEIGHT && !isResizingHeight.value) {
-    localInputHeight.value = val;
+  if (typeof val === 'number' && !isResizingHeight.value) {
+    localInputHeight.value = clampInputHeight(val);
   }
+});
+
+function onWindowResize() {
+  if (!isResizingHeight.value) {
+    localInputHeight.value = clampInputHeight(localInputHeight.value);
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('resize', onWindowResize);
 });
 
 let startX = 0;
@@ -363,8 +379,7 @@ function startResizeHeight(e) {
 function handleResizeHeight(e) {
   if (!isResizingHeight.value) return;
   const delta = startY - e.clientY; // drag up -> expand input height
-  const maxHeight = Math.min(window.innerHeight * 0.45, 360);
-  localInputHeight.value = Math.min(Math.max(startHeight + delta, MIN_INPUT_HEIGHT), maxHeight);
+  localInputHeight.value = clampInputHeight(startHeight + delta);
 }
 
 function stopResizeHeight() {
@@ -398,8 +413,7 @@ function handleResizeHeightTouch(e) {
   if (!isResizingHeight.value || e.touches?.length !== 1) return;
   e.preventDefault();
   const delta = startY - e.touches[0].clientY;
-  const maxHeight = Math.min(window.innerHeight * 0.45, 360);
-  localInputHeight.value = Math.min(Math.max(startHeight + delta, MIN_INPUT_HEIGHT), maxHeight);
+  localInputHeight.value = clampInputHeight(startHeight + delta);
 }
 
 function stopResizeHeightTouch() {
@@ -411,8 +425,11 @@ function stopResizeHeightTouch() {
 }
 
 onBeforeUnmount(() => {
+  window.removeEventListener('resize', onWindowResize);
   stopResizeWidth();
   stopResizeHeight();
+  stopResizeWidthTouch();
+  stopResizeHeightTouch();
 });
 </script>
 
@@ -850,6 +867,8 @@ onBeforeUnmount(() => {
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
   box-sizing: border-box;
   font-family: inherit;
+  min-height: 48px;
+  max-height: 45vh;
 }
 
 .agent-input textarea:focus {
