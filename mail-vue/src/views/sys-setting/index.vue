@@ -52,9 +52,9 @@
               <div class="setting-item">
                 <div>
                   <span>{{ $t('multipleEmail') }}</span>
-                  <el-tooltip effect="dark" :content="$t('multipleEmailDesc')">
+                  <InfoHint effect="dark" :content="$t('multipleEmailDesc')">
                     <Icon class="warning" icon="fe:warning" width="18" height="18"/>
-                  </el-tooltip>
+                  </InfoHint>
                 </div>
                 <div>
                   <el-switch @change="change" :before-change="beforeChange" :active-value="0" :inactive-value="1"
@@ -137,9 +137,9 @@
               <div class="setting-item">
                 <div>
                   <span>{{ $t('autoRefresh') }}</span>
-                  <el-tooltip effect="dark" :content="$t('autoRefreshDesc')">
+                  <InfoHint effect="dark" :content="$t('autoRefreshDesc')">
                     <Icon class="warning" icon="fe:warning" width="18" height="18"/>
-                  </el-tooltip>
+                  </InfoHint>
                 </div>
                 <div>
                   <el-select
@@ -167,9 +167,9 @@
               <div class="setting-item">
                 <div>
                   <span>{{ $t('noRecipientTitle') }}</span>
-                  <el-tooltip effect="dark" :content="$t('noRecipientDesc')">
+                  <InfoHint effect="dark" :content="$t('noRecipientDesc')">
                     <Icon class="warning" icon="fe:warning" width="18" height="18"/>
-                  </el-tooltip>
+                  </InfoHint>
                 </div>
                 <div>
                   <el-switch @change="change" :before-change="beforeChange" :active-value="0" :inactive-value="1"
@@ -179,9 +179,9 @@
               <div class="setting-item">
                 <div>
                   <span>{{ $t('emailProvider') }}</span>
-                  <el-tooltip effect="dark" :content="$t('emailProviderDesc')">
+                  <InfoHint effect="dark" :content="$t('emailProviderDesc')">
                     <Icon class="warning" icon="fe:warning" width="18" height="18"/>
-                  </el-tooltip>
+                  </InfoHint>
                 </div>
                 <div>
                   <el-select v-model="setting.emailProvider" @change="change" size="small" style="width: 200px">
@@ -194,9 +194,9 @@
               <div class="setting-item">
                 <div>
                   <span>{{ $t('externalApiKey') }}</span>
-                  <el-tooltip effect="dark" :content="$t('externalApiKeyDesc')">
+                  <InfoHint effect="dark" :content="$t('externalApiKeyDesc')">
                     <Icon class="warning" icon="fe:warning" width="18" height="18"/>
-                  </el-tooltip>
+                  </InfoHint>
                 </div>
                 <div style="display: flex; gap: 8px; align-items: center;">
                   <el-input v-model="setting.externalApiKey" size="small" style="width: 280px" :placeholder="$t('externalApiKeyPlaceholder')" readonly/>
@@ -226,9 +226,9 @@
               <div class="r2domain-item">
                 <div>
                   <span>{{ $t('osDomain') }}</span>
-                  <el-tooltip effect="dark" :content="$t('ossDomainDesc')">
+                  <InfoHint effect="dark" :content="$t('ossDomainDesc')">
                     <Icon class="warning" icon="fe:warning" width="18" height="18"/>
-                  </el-tooltip>
+                  </InfoHint>
                 </div>
                 <div class="r2domain">
                   <span>{{ setting.r2Domain || '' }}</span>
@@ -468,12 +468,12 @@
         <template #header>
           <span style="font-size: 18px">
             {{ $t('backgroundTitle') }}
-            <el-tooltip>
+            <InfoHint effect="dark">
               <template #content>
                 <span>{{ $t('backgroundWarning') }}</span>
               </template>
               <Icon class="title-icon  warning" icon="fe:warning" width="18" height="18"/>
-            </el-tooltip>
+            </InfoHint>
           </span>
         </template>
         <el-input :placeholder="$t('backgroundUrlDesc')" v-model="backgroundUrl" v-if="!localUpShow"
@@ -503,9 +503,9 @@
         <template #header>
           <div class="forward-head">
             <span class="forward-set-title">{{ $t('tgBot') }}</span>
-            <el-tooltip effect="dark" :content="$t('tgBotDesc')">
+            <InfoHint effect="dark" :content="$t('tgBotDesc')">
               <Icon class="warning" icon="fe:warning" width="18" height="18"/>
-            </el-tooltip>
+            </InfoHint>
           </div>
         </template>
         <div class="forward-set-body">
@@ -564,9 +564,9 @@
         <template #header>
           <div class="forward-head">
             <span class="forward-set-title">{{ $t('otherEmail') }}</span>
-            <el-tooltip effect="dark" :content="$t('otherEmailDesc')">
+            <InfoHint effect="dark" :content="$t('otherEmailDesc')">
               <Icon class="warning" icon="fe:warning" width="18" height="18"/>
-            </el-tooltip>
+            </InfoHint>
           </div>
         </template>
         <div class="forward-set-body">
@@ -590,9 +590,9 @@
         <template #header>
           <div class="forward-head">
             <span class="forward-set-title">{{ $t('forwardingRules') }}</span>
-            <el-tooltip effect="dark" :content="$t('forwardingRulesDesc')">
+            <InfoHint effect="dark" :content="$t('forwardingRulesDesc')">
               <Icon class="warning" icon="fe:warning" width="18" height="18"/>
-            </el-tooltip>
+            </InfoHint>
           </div>
         </template>
         <div class="forward-set-body">
@@ -718,9 +718,9 @@
           <div class="force-path-style">
             <div class="force-path-style-left">
               <span>ForcePathStyle</span>
-              <el-tooltip effect="dark" :content="$t('forcePathStyleDesc')">
+              <InfoHint effect="dark" :content="$t('forcePathStyleDesc')">
                 <Icon class="warning" icon="fe:warning" width="18" height="18"/>
-              </el-tooltip>
+              </InfoHint>
             </div>
             <el-switch :before-change="beforeChange" :active-value="0" :inactive-value="1"
                        v-model="s3.forcePathStyle"/>
