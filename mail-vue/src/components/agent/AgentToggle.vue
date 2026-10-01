@@ -18,12 +18,13 @@ function toggle() {
 
 <template>
   <button
-    class="agent-toggle icon-item"
+    class="agent-toggle"
     :class="{ active: store.panelVisible, disabled: !enabled }"
     :title="enabled ? t('aiAgentChatTitle') : t('aiAgentEnable')"
+    :aria-label="t('aiAgentChatTitle')"
     @click="toggle"
   >
-    <span class="agent-toggle-spark">✨</span>
+    <span class="agent-toggle-spark" aria-hidden="true">✨</span>
     <span class="agent-toggle-label">{{ $t('aiAgentChatTitle') }}</span>
   </button>
 </template>
@@ -33,6 +34,7 @@ function toggle() {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  align-self: center;
   gap: 8px;
   background: linear-gradient(135deg, #fef3c7, #fde68a);
   border: 1px solid #f59e0b;
@@ -50,11 +52,21 @@ function toggle() {
   height: 32px;
   line-height: 1;
 }
+
 .agent-toggle-label {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.agent-toggle-spark {
+  font-size: 16px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 @media (max-width: 768px) {
   .agent-toggle {
     min-width: 0;
@@ -70,26 +82,24 @@ function toggle() {
   }
   .agent-toggle-spark {
     font-size: 14px;
-    line-height: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
   }
 }
+
 @media (hover: hover) {
   .agent-toggle:hover {
     transform: translateY(-1px);
     box-shadow: 0 2px 6px rgba(245, 158, 11, 0.3);
   }
 }
+
 .agent-toggle.active {
   background: linear-gradient(135deg, #fbbf24, #f59e0b);
   color: white;
 }
+
 .agent-toggle.disabled {
   background: #f3f4f6;
   border-color: #d1d5db;
   color: #6b7280;
 }
-.agent-toggle-spark { font-size: 16px; }
 </style>
