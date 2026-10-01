@@ -50,13 +50,38 @@ function toggle() {
   height: 32px;
   line-height: 1;
 }
+.agent-toggle-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 @media (max-width: 768px) {
   .agent-toggle {
     min-width: 0;
-    padding: 6px 14px;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    margin: 0;
+    border-radius: 50%;
+    gap: 0;
+  }
+  .agent-toggle-label {
+    display: none;
+  }
+  .agent-toggle-spark {
+    font-size: 14px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 }
-.agent-toggle:hover { transform: translateY(-1px); box-shadow: 0 2px 6px rgba(245, 158, 11, 0.3); }
+@media (hover: hover) {
+  .agent-toggle:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(245, 158, 11, 0.3);
+  }
+}
 .agent-toggle.active {
   background: linear-gradient(135deg, #fbbf24, #f59e0b);
   color: white;
