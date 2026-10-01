@@ -11,7 +11,7 @@
 </template>
 
 <script setup>
-import { useMediaQuery } from '@vueuse/core';
+import { canHover } from '@/utils/device-utils';
 
 defineOptions({
   inheritAttrs: false,
@@ -27,8 +27,6 @@ defineProps({
     default: '',
   },
 });
-
-const canHover = useMediaQuery('(hover: hover) and (pointer: fine)');
 </script>
 
 <style>

@@ -79,11 +79,11 @@
               <div class="title" :class="accountShow ? 'title-column' : 'title-column'">
 
                 <div class="email-sender" :style=" (showStatus ? 'gap: 10px;' : '') + ((item.unread === EmailUnreadEnum.UNREAD && showUnread)  ? 'font-weight: bold' : '')">
-                  <div class="email-status" v-if="showStatus" @click.stop>
+                  <div class="email-status" v-if="showStatus" @click="!canHover && $event.stopPropagation()">
                     <InfoHint effect="dark" :content="item.statusIcon.content">
                       <Icon :icon="item.statusIcon.icon" :style="`color: ${item.statusIcon.color}`" width="20" height="20"/>
                     </InfoHint>
-                    <div class="del-status" v-if="item.isDel" @click.stop>
+                    <div class="del-status" v-if="item.isDel">
                       <InfoHint effect="dark" :content="item.isDelContent">
                         <Icon class="icon" icon="mdi:email-remove" width="20" height="20"/>
                       </InfoHint>
@@ -254,6 +254,7 @@ import {useUiStore} from "@/store/ui.js";
 import {useSettingStore} from "@/store/setting.js";
 import {sleep} from "@/utils/time-utils.js"
 import {fromNow} from "@/utils/day.js";
+import {canHover} from "@/utils/device-utils";
 import {useI18n} from "vue-i18n";
 import {EmailUnreadEnum} from "@/enums/email-enum.js";
 import { UseVirtualList } from '@vueuse/components'

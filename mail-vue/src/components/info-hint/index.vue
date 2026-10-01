@@ -12,7 +12,7 @@
 
 <script setup>
 import { computed } from 'vue';
-import { useMediaQuery } from '@vueuse/core';
+import { canHover } from '@/utils/device-utils';
 
 defineOptions({
   inheritAttrs: false,
@@ -29,6 +29,5 @@ const props = defineProps({
   },
 });
 
-const canHover = useMediaQuery('(hover: hover) and (pointer: fine)');
 const computedTrigger = computed(() => props.trigger || (canHover.value ? 'hover' : 'click'));
 </script>
