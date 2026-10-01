@@ -14,14 +14,14 @@
                :type="'send'"
   >
     <template #first>
-      <el-tooltip :content="params.timeSort === 0 ? $t('sortDesc') : $t('sortAsc')" placement="top">
+      <IconHint :content="params.timeSort === 0 ? $t('sortDesc') : $t('sortAsc')" placement="top">
         <span style="display: flex; align-items: center;">
           <Icon class="icon" @click="changeTimeSort" icon="material-symbols-light:timer-arrow-down-outline"
                 v-if="params.timeSort === 0" width="28" height="28"/>
           <Icon class="icon" @click="changeTimeSort" icon="material-symbols-light:timer-arrow-up-outline" v-else
                 width="28" height="28"/>
         </span>
-      </el-tooltip>
+      </IconHint>
     </template>
   </emailScroll>
 </template>
