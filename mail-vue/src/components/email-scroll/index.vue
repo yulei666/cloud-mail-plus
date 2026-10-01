@@ -59,14 +59,14 @@
                  :key="item.emailId"
                  @contextmenu="handleContextmenu($event, item)"
             >
-              <el-tooltip :disabled="!isSelectMax || item.checked" :content="t('maxSelectNotice')" placement="top">
+              <IconHint :disabled="!isSelectMax || item.checked" :content="t('maxSelectNotice')" placement="top">
                 <span @click.stop="handleDisabledCheckClick(item)">
                   <el-checkbox :class=" props.type === 'all-email' ? 'all-email-checkbox' : 'checkbox'"
                                v-model="item.checked"
                                :disabled="!item.checked && isSelectMax"
                                @click.stop></el-checkbox>
                 </span>
-              </el-tooltip>
+              </IconHint>
               <div @click.stop="starChange(item)" class="pc-star" v-if="showStar">
                 <IconHint :content="item.isStar ? $t('cancelStar') : $t('addStar')" placement="top">
                   <span style="display: flex; align-items: center;">

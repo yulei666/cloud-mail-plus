@@ -13,6 +13,10 @@
 <script setup>
 import { useMediaQuery } from '@vueuse/core';
 
+defineOptions({
+  inheritAttrs: false,
+});
+
 defineProps({
   disabled: {
     type: Boolean,
