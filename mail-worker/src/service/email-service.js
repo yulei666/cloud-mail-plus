@@ -29,7 +29,7 @@ const emailService = {
 
 	async list(c, params, userId) {
 
-		let { emailId, type, accountId, size, timeSort, allReceive } = params;
+		let { emailId, type, accountId, size, timeSort, allReceive, folder } = params;
 
 		size = Number(size);
 		emailId = Number(emailId);
@@ -41,6 +41,11 @@ const emailService = {
 		if (size > 50) {
 			size = 50;
 		}
+
+		// 仅收件类列表按文件夹过滤（type 来自 query string，需按数字比较）；发件不分文件夹
+		const isReceive = Number(type) === emailConst.type.RECEIVE;
+		const folderNum = Object.values(emailConst.folder).includes(Number(folder)) ? Number(folder) : emailConst.folder.INBOX;
+		const folderCond = isReceive ? eq(email.folder, folderNum) : undefined; // and() skips undefined
 
 		if (!emailId) {
 
@@ -80,6 +85,7 @@ const emailService = {
 					timeSort ? gt(email.emailId, emailId) : lt(email.emailId, emailId),
 					eq(email.type, type),
 					type === emailConst.type.SEND ? ne(email.status, emailConst.status.SAVING) : eq(1, 1),
+					folderCond,
 					eq(email.isDel, isDel.NORMAL),
 					eq(account.isDel, isDel.NORMAL)
 				)
@@ -104,6 +110,7 @@ const emailService = {
 					eq(email.userId, userId),
 					eq(email.type, type),
 					type === emailConst.type.SEND ? ne(email.status, emailConst.status.SAVING) : eq(1, 1),
+					folderCond,
 					eq(email.isDel, isDel.NORMAL),
 					eq(account.isDel, isDel.NORMAL)
 				)
@@ -115,6 +122,7 @@ const emailService = {
 				eq(email.userId, userId),
 				eq(email.type, type),
 				type === emailConst.type.SEND ? ne(email.status, emailConst.status.SAVING) : eq(1, 1),
+				folderCond,
 				eq(email.isDel, isDel.NORMAL)
 			))
 			.orderBy(desc(email.emailId)).limit(1).get();
@@ -655,7 +663,8 @@ const emailService = {
 					eq(email.isDel, isDel.NORMAL),
 					eq(account.isDel, isDel.NORMAL),
 					allReceive ? eq(1,1) : eq(email.accountId, accountId),
-					eq(email.type, emailConst.type.RECEIVE)
+					eq(email.type, emailConst.type.RECEIVE),
+					eq(email.folder, emailConst.folder.INBOX)
 				))
 			.orderBy(desc(email.emailId))
 			.limit(20);
@@ -952,6 +961,30 @@ const emailService = {
 		const emailIdList = (Array.isArray(emailIds) ? emailIds : emailIds.split(',')).map(Number);
 		for (const chunk of chunkArray(emailIdList)) {
 			await orm(c).update(email).set({ unread: emailConst.unread.READ }).where(and(eq(email.userId, userId), inArray(email.emailId, chunk))).run();
+		}
+	},
+
+	async move(c, params, userId) {
+		const { emailIds, folder } = params || {};
+
+		if (!Array.isArray(emailIds) || emailIds.length === 0 || emailIds.length > 500
+			|| !emailIds.every(id => Number.isInteger(id))) {
+			throw new BizError(t('invalidMoveParams'));
+		}
+
+		if (!Object.values(emailConst.folder).includes(folder)) {
+			throw new BizError(t('invalidMoveParams'));
+		}
+
+		for (const chunk of chunkArray(emailIds)) {
+			await orm(c).update(email).set({ folder }).where(
+				and(
+					eq(email.userId, userId),
+					inArray(email.emailId, chunk),
+					eq(email.type, emailConst.type.RECEIVE),
+					eq(email.isDel, isDel.NORMAL)
+				)
+			).run();
 		}
 	},
 

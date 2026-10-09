@@ -9,6 +9,7 @@
                :star-cancel="starCancel"
                :time-sort="params.timeSort"
                :email-read="emailRead"
+               :emailMove="emailMove"
                :show-unread="true"
                actionLeft="4px"
                @jump="jumpContent"
@@ -32,7 +33,7 @@ import {useAccountStore} from "@/store/account.js";
 import {useEmailStore} from "@/store/email.js";
 import {useSettingStore} from "@/store/setting.js";
 import emailScroll from "@/components/email-scroll/index.vue"
-import {emailList, emailDelete, emailPermanentDelete, emailLatest, emailRead} from "@/request/email.js";
+import {emailList, emailDelete, emailPermanentDelete, emailLatest, emailRead, emailMove} from "@/request/email.js";
 import {starAdd, starCancel} from "@/request/star.js";
 import {defineOptions, h, onMounted, reactive, ref, watch} from "vue";
 import {sleep} from "@/utils/time-utils.js";
@@ -146,7 +147,7 @@ function cancelStar(email) {
 function getEmailList(emailId, size) {
   const accountId =  accountStore.currentAccountId;
   const allReceive = accountStore.currentAccount.allReceive;
-  return emailList(accountId, allReceive, emailId, params.timeSort, size, 0).then(data => {
+  return emailList(accountId, allReceive, emailId, params.timeSort, size, 0, 0).then(data => {
     data.latestEmail.reqAccountId = accountId;
     data.latestEmail.allReceive = allReceive;
     return data;
