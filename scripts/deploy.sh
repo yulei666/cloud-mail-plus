@@ -545,6 +545,7 @@ if [ "$REDEPLOY" = "false" ]; then
 else
   step "—" "Redeploy mode: skipping resource creation, reusing existing config"
   [ -z "${D1_ID:-}" ] && { err "No saved state — run without --redeploy first"; exit 1; }
+  patch_toml
 fi
 
 deploy_worker
