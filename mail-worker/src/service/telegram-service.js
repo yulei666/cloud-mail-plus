@@ -16,14 +16,17 @@ import domainUtils from "../utils/domain-uitls";
 
 const telegramService = {
 
-	async getEmailContent(c, params) {
+	async getEmailContent(c, params, nonce = '') {
 
 		const { token } = params
 
 		const result = await jwtUtils.verifyToken(c, token);
 
 		if (!result) {
-			return emailTextTemplate('Access denied')
+			return {
+				type: 'text',
+				content: emailTextTemplate('Access denied')
+			};
 		}
 
 		const emailRow = await orm(c).select().from(email).where(eq(email.emailId, result.emailId)).get();
@@ -32,13 +35,22 @@ const telegramService = {
 
 			if (emailRow.content) {
 				const { r2Domain } = await settingService.query(c);
-				return emailHtmlTemplate(emailRow.content || '', r2Domain)
+				return {
+					type: 'html',
+					content: emailHtmlTemplate(emailRow.content || '', r2Domain, nonce)
+				};
 			} else {
-				return emailTextTemplate(emailRow.text || '')
+				return {
+					type: 'text',
+					content: emailTextTemplate(emailRow.text || '')
+				};
 			}
 
 		} else {
-			return emailTextTemplate('The email does not exist')
+			return {
+				type: 'text',
+				content: emailTextTemplate('The email does not exist')
+			};
 		}
 
 	},

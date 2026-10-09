@@ -576,18 +576,15 @@ const accountShow = computed(() => {
 
 function htmlToText(email) {
   if (email.content) {
-
-    const tempDiv = document.createElement('div');
-
-    tempDiv.innerHTML = email.content.replace(
-        /<(img|iframe|object|embed|video|audio|source|link)[^>]*>/gi, ''
-    );
-
-    const scriptsAndStyles = tempDiv.querySelectorAll('script, style, title');
-    scriptsAndStyles.forEach(el => el.remove());
-    let text = tempDiv.textContent || tempDiv.innerText || '';
-    text = text.replace(/\s+/g, ' ').trim();
-    return cleanSpace(text)
+    try {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(email.content, 'text/html');
+      doc.querySelectorAll('script, style, title, noscript').forEach(el => el.remove());
+      const text = doc.body?.textContent || '';
+      return cleanSpace(text.replace(/\s+/g, ' ').trim());
+    } catch {
+      return '';
+    }
   }
 
   if (email.text) {
@@ -595,7 +592,6 @@ function htmlToText(email) {
   } else {
     return ''
   }
-
 }
 
 function cleanSpace(text) {

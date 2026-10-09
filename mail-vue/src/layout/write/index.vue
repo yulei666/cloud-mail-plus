@@ -122,6 +122,7 @@ import dayjs from "dayjs";
 import {useI18n} from "vue-i18n";
 import router from "@/router/index.js";
 import {ElMessageBox} from "element-plus";
+import {sanitizeEmailHtml, escapeHtml} from "@/utils/purify.js";
 
 defineExpose({
   open,
@@ -467,8 +468,9 @@ function openForward(email) {
   defValue.value = ''
 
   setTimeout(() => {
+    const safeContent = sanitizeEmailHtml(formatImage(email.content));
     defValue.value = `
-      ${formatImage(email.content) || `<pre style="font-family: inherit;word-break: break-word;white-space: pre-wrap;margin: 0">${email.text}</pre>`}
+      ${safeContent || `<pre style="font-family: inherit;word-break: break-word;white-space: pre-wrap;margin: 0">${escapeHtml(email.text || '')}</pre>`}
     `
     open()
 
@@ -500,15 +502,16 @@ function openReply(email) {
   defValue.value = ''
 
   setTimeout(() => {
+    const safeContent = sanitizeEmailHtml(formatImage(email.content));
     defValue.value = `
     <div></div>
     <div>
     <br>
-        ${formatDetailDate(email.createTime)} ${email.name} &lt${email.sendEmail}&gt ${t('wrote')}:
+        ${formatDetailDate(email.createTime)} ${escapeHtml(email.name || '')} &lt;${escapeHtml(email.sendEmail || '')}&gt; ${t('wrote')}:
     </div>
     <blockquote class="mceNonEditable" style="margin: 0 0 0 0.8ex;border-left: 1px solid rgb(204,204,204);padding-left: 1ex;">
-      <articl>
-          ${formatImage(email.content) || `<pre style="font-family: inherit;word-break: break-word;white-space: pre-wrap;margin: 0">${email.text}</pre>`}
+      <article>
+          ${safeContent || `<pre style="font-family: inherit;word-break: break-word;white-space: pre-wrap;margin: 0">${escapeHtml(email.text || '')}</pre>`}
       </article>
     </blockquote>`
     open()

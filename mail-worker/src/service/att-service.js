@@ -21,7 +21,9 @@ const attService = {
 				contentType: attachment.mimeType,
 			}
 
-			if (!attachment.contentId) {
+			const isDangerous = /^(?:text\/html|text\/xml|application\/xml|application\/xhtml\+xml|image\/svg\+xml)(?:;|$)/i.test(attachment.mimeType || '') || (attachment.mimeType || '').toLowerCase().includes('+xml');
+
+			if (!attachment.contentId || isDangerous) {
 				metadate.contentDisposition = fileUtils.contentDisposition('attachment', attachment.filename)
 			} else {
 				metadate.contentDisposition = fileUtils.contentDisposition('inline', attachment.filename)

@@ -3,7 +3,44 @@ import settingService from './setting-service';
 import kvObjService from './kv-obj-service';
 import fileUtils from '../utils/file-utils';
 
+const DANGEROUS_MIME_REGEX = /^(?:text\/html|text\/xml|application\/xml|application\/xhtml\+xml|image\/svg\+xml)(?:;|$)/i;
+
+/**
+ * Apply security headers to attachment responses:
+ * - nosniff
+ * - CSP: sandbox; default-src 'none';
+ * - force attachment disposition for dangerous MIME types (html, svg, xml)
+ */
+export function applyAttachmentSecurityHeaders(headers, key = '') {
+	headers.set('X-Content-Type-Options', 'nosniff');
+	headers.set('Content-Security-Policy', "sandbox; default-src 'none';");
+
+	const rawContentType = headers.get('Content-Type') || 'application/octet-stream';
+	if (!headers.has('Content-Type')) {
+		headers.set('Content-Type', rawContentType);
+	}
+	const isDangerous = DANGEROUS_MIME_REGEX.test(rawContentType) || rawContentType.toLowerCase().includes('+xml');
+
+	const disposition = headers.get('Content-Disposition');
+	if (isDangerous) {
+		if (disposition) {
+			const sanitized = fileUtils.sanitizeContentDisposition(disposition);
+			headers.set('Content-Disposition', sanitized.replace(/^\s*inline/i, 'attachment'));
+		} else {
+			const fallbackName = key.split('/').pop() || 'download';
+			headers.set('Content-Disposition', fileUtils.contentDisposition('attachment', fallbackName));
+		}
+	} else if (disposition) {
+		headers.set('Content-Disposition', fileUtils.sanitizeContentDisposition(disposition));
+	}
+	return headers;
+}
+
 const r2Service = {
+
+	applyAttachmentSecurityHeaders(headers, key = '') {
+		return applyAttachmentSecurityHeaders(headers, key);
+	},
 
 	async storageType(c) {
 
@@ -58,12 +95,11 @@ const r2Service = {
 	async toObjResp(c, key) {
 
 		const storageType = await this.storageType(c);
+		let resp = null;
 
 		if (storageType === 'KV') {
-			return await kvObjService.toObjResp(c, key);
-		}
-
-		if (storageType === 'R2') {
+			resp = await kvObjService.toObjResp(c, key);
+		} else if (storageType === 'R2') {
 			const obj = await c.env.r2.get(key);
 			if (!obj) {
 				console.warn(`[storage] R2 miss: ${key}`);
@@ -74,10 +110,8 @@ const r2Service = {
 			const cd = headers.get('content-disposition');
 			if (cd) headers.set('Content-Disposition', fileUtils.sanitizeContentDisposition(cd));
 			headers.set('etag', obj.httpEtag);
-			return new Response(obj.body, { headers });
-		}
-
-		if (storageType === 'S3') {
+			resp = new Response(obj.body, { headers });
+		} else if (storageType === 'S3') {
 			try {
 				const obj = await s3Service.getObj(c, key);
 				if (!obj?.Body) {
@@ -89,14 +123,25 @@ const r2Service = {
 				if (obj.ContentDisposition) headers.set('Content-Disposition', obj.ContentDisposition);
 				if (obj.CacheControl) headers.set('Cache-Control', obj.CacheControl);
 				if (obj.ETag) headers.set('ETag', obj.ETag);
-				return new Response(obj.Body, { headers });
+				resp = new Response(obj.Body, { headers });
 			} catch (e) {
 				console.warn(`[storage] S3 read failed for ${key}: ${e.message}`);
 				return new Response('Not Found', { status: 404 });
 			}
 		}
 
-		return new Response('Not Found', { status: 404 });
+		if (!resp || (resp.status !== 200 && resp.status !== 304)) {
+			return resp || new Response('Not Found', { status: 404 });
+		}
+
+		const headers = new Headers(resp.headers);
+		applyAttachmentSecurityHeaders(headers, key);
+
+		return new Response(resp.body, {
+			status: resp.status,
+			statusText: resp.statusText,
+			headers
+		});
 	},
 
 	async delete(c, key) {

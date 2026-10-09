@@ -1,10 +1,11 @@
 import { parseHTML } from 'linkedom';
 import domainUtils from '../utils/domain-uitls';
 
-export default function emailHtmlTemplate(html, domain) {
+export default function emailHtmlTemplate(html, domain, nonce = '') {
 
 	const { document } = parseHTML(html);
 	document.querySelectorAll('script').forEach(script => script.remove());
+	document.querySelectorAll('iframe, object, embed, form, base, meta').forEach(el => el.remove());
 	html = document.toString();
 	html = html.replace(/{{domain}}/g, domainUtils.toOssDomain(domain) + '/');
 	const safeHtmlJson = JSON.stringify(html).replace(/</g, '\\u003C');
@@ -41,7 +42,7 @@ export default function emailHtmlTemplate(html, domain) {
         <div id='container' class='content-html'></div>
     </div>
 
-    <script>
+    <script${nonce ? ` nonce="${nonce}"` : ''}>
 
         function renderHTML(html) {
             const container = document.getElementById('container');
@@ -90,7 +91,6 @@ export default function emailHtmlTemplate(html, domain) {
                         width: fit-content;
                         height: fit-content;
                         min-width: 100%;
-                        \${bodyStyle ? bodyStyle : ''} /* 注入 body 的 style */
                     }
 
                     img:not(table img) {
@@ -102,6 +102,12 @@ export default function emailHtmlTemplate(html, domain) {
                     \${cleanedHtml}
                 </div>
             \`;
+
+            // 安全赋给 shadow-content 的 style.cssText，防止样式逃逸跳出 <style>
+            const shadowContent = shadowRoot.querySelector('.shadow-content');
+            if (shadowContent && bodyStyle) {
+                shadowContent.style.cssText = bodyStyle;
+            }
 
             // 自动缩放
             autoScale(shadowRoot, container);

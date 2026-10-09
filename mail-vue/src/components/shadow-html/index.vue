@@ -6,6 +6,7 @@
 
 <script setup>
 import { ref, onMounted, watch } from 'vue'
+import { sanitizeEmailHtml } from '@/utils/purify'
 
 const props = defineProps({
   html: {
@@ -26,10 +27,10 @@ function updateContent() {
   const bodyStyleMatch = props.html.match(bodyStyleRegex);
   const bodyStyle = bodyStyleMatch ? bodyStyleMatch[1] : '';
 
-  // 2. 移除 <body> 标签（保留内容）
-  const cleanedHtml = props.html.replace(/<\/?body[^>]*>/gi, '');
+  // 2. 净化 HTML（去除 script、事件属性、危险标签等）
+  const cleanedHtml = sanitizeEmailHtml(props.html);
 
-  // 3. 将 body 的 style 应用到 .shadow-content
+  // 3. 将静态样式与内容写入 shadowRoot（避免在 <style> 标签内插值导致闭合跳出）
   shadowRoot.innerHTML = `
     <style>
       :host {
@@ -63,7 +64,6 @@ function updateContent() {
         width: fit-content;
         height: fit-content;
         min-width: 100%;
-        ${bodyStyle ? bodyStyle : ''} /* 注入 body 的 style */
       }
 
       img:not(table img) {
@@ -76,6 +76,12 @@ function updateContent() {
       ${cleanedHtml}
     </div>
   `;
+
+  // 4. 将 bodyStyle 安全赋给 .shadow-content 的 cssText，防止 CSS 逃逸注入
+  const shadowContent = shadowRoot.querySelector('.shadow-content');
+  if (shadowContent && bodyStyle) {
+    shadowContent.style.cssText = bodyStyle;
+  }
 }
 
 function autoScale() {
