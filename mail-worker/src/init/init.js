@@ -60,7 +60,10 @@ const dbInit = {
 			`CREATE INDEX IF NOT EXISTS idx_attachments_email_type ON attachments(email_id, type)`,
 			`CREATE INDEX IF NOT EXISTS idx_role_perm_role ON role_perm(role_id)`,
 			`CREATE INDEX IF NOT EXISTS idx_oauth_oauth_user_id ON oauth(oauth_user_id)`,
-			`CREATE INDEX IF NOT EXISTS idx_oauth_user_id ON oauth(user_id)`
+			`CREATE INDEX IF NOT EXISTS idx_oauth_user_id ON oauth(user_id)`,
+			// external-api inbox polling by recipient, delivery events by Message-ID
+			`CREATE INDEX IF NOT EXISTS idx_email_to_email_is_del ON email(to_email, is_del)`,
+			`CREATE INDEX IF NOT EXISTS idx_email_message_id_type ON email(message_id, type)`
 		];
 
 		for (const sql of INDEX_SQL_LIST) {
